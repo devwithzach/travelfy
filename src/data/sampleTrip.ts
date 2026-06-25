@@ -71,7 +71,7 @@ export const sampleTrip: TripData = {
       roomType: 'Standard Room',
       bookingReference: '',
       nights: 2,
-      mapsUrl: 'https://maps.google.com/?q=Dorsett+Kwun+Tong+Hong+Kong',
+      mapsUrl: 'https://maps.google.com/?q=22.3122,114.2265',
       notes: 'Standard check-in 3:00 PM. Check-out 11:00 AM. Hotel may not provide bottled water.',
     },
     {
@@ -85,7 +85,7 @@ export const sampleTrip: TripData = {
       roomType: 'Standard Room',
       bookingReference: '',
       nights: 1,
-      mapsUrl: 'https://maps.google.com/?q=Hotel+Guia+Macau',
+      mapsUrl: 'https://maps.google.com/?q=22.2015,113.5516',
       notes: 'Standard check-in 3:00 PM. Check-out 11:00 AM.',
     },
   ],

@@ -5,164 +5,110 @@ import type {
   Note, VisaInfo, CurrencyRate
 } from '@/types'
 import { createEmptyTrip } from '@/data/emptyTrip'
+import {
+  flightRowSchema, hotelRowSchema, activityRowSchema, dayRowSchema,
+  checklistRowSchema, expenseRowSchema, documentRowSchema, contactRowSchema,
+  linkRowSchema, noteRowSchema, visaRowSchema, rateRowSchema, passportRowSchema,
+  tripRowSchema, tripSummaryRowSchema,
+} from './schemas'
 
-// ── Mappers: DB row → TypeScript ──────────────────────────
+// ── Mappers: validated DB row → app type ──────────────────
 
-function mapFlight(r: Record<string, unknown>): Flight {
+function mapFlight(r: unknown): Flight {
+  const v = flightRowSchema.parse(r)
   return {
-    id: r.id as string,
-    flightNumber: r.flight_number as string || '',
-    airline: r.airline as string || '',
-    from: r.from_city as string || '',
-    fromCode: r.from_code as string || '',
-    fromAirport: r.from_airport as string || '',
-    fromTerminal: r.from_terminal as string || '',
-    to: r.to_city as string || '',
-    toCode: r.to_code as string || '',
-    toAirport: r.to_airport as string || '',
-    toTerminal: r.to_terminal as string || '',
-    departureDate: r.departure_date as string || '',
-    departureTime: r.departure_time as string || '',
-    arrivalDate: r.arrival_date as string || '',
-    arrivalTime: r.arrival_time as string || '',
-    arrivalDateOffset: r.arrival_date_offset as string || '',
-    seat: r.seat as string || '',
-    bookingReference: r.booking_reference as string || '',
-    gate: r.gate as string || '',
-    status: (r.status as Flight['status']) || 'upcoming',
+    id: v.id, flightNumber: v.flight_number, airline: v.airline,
+    from: v.from_city, fromCode: v.from_code, fromAirport: v.from_airport, fromTerminal: v.from_terminal,
+    to: v.to_city, toCode: v.to_code, toAirport: v.to_airport, toTerminal: v.to_terminal,
+    departureDate: v.departure_date, departureTime: v.departure_time,
+    arrivalDate: v.arrival_date, arrivalTime: v.arrival_time,
+    arrivalDateOffset: v.arrival_date_offset,
+    seat: v.seat, bookingReference: v.booking_reference, gate: v.gate,
+    status: v.status,
   }
 }
 
-function mapHotel(r: Record<string, unknown>): Hotel {
+function mapHotel(r: unknown): Hotel {
+  const v = hotelRowSchema.parse(r)
   return {
-    id: r.id as string,
-    name: r.name as string || '',
-    address: r.address as string || '',
-    phone: r.phone as string || '',
-    website: r.website as string || '',
-    checkIn: r.check_in as string || '',
-    checkOut: r.check_out as string || '',
-    roomType: r.room_type as string || '',
-    bookingReference: r.booking_reference as string || '',
-    nights: r.nights as number || 1,
-    mapsUrl: r.maps_url as string || '',
-    notes: r.notes as string || '',
+    id: v.id, name: v.name, address: v.address, phone: v.phone, website: v.website,
+    checkIn: v.check_in, checkOut: v.check_out, roomType: v.room_type,
+    bookingReference: v.booking_reference, nights: v.nights, mapsUrl: v.maps_url, notes: v.notes,
   }
 }
 
-function mapActivity(r: Record<string, unknown>): ItineraryActivity {
+function mapActivity(r: unknown): ItineraryActivity {
+  const v = activityRowSchema.parse(r)
   return {
-    id: r.id as string,
-    time: r.time as string || '',
-    title: r.title as string || '',
-    description: r.description as string || '',
-    type: (r.type as ItineraryActivity['type']) || 'other',
-    location: r.location as string || '',
+    id: v.id, time: v.time, title: v.title, description: v.description,
+    type: v.type, location: v.location,
   }
 }
 
-function mapDay(r: Record<string, unknown>): ItineraryDay {
-  const acts = (r.itinerary_activities as Record<string, unknown>[] | null) || []
+function mapDay(r: unknown): ItineraryDay {
+  const v = dayRowSchema.parse(r)
+  const acts = v.itinerary_activities ?? []
   return {
-    id: r.id as string,
-    date: r.date as string || '',
-    dayNumber: r.day_number as number || 1,
-    title: r.title as string || '',
-    subtitle: r.subtitle as string || '',
-    meals: (r.meals as string[]) || [],
-    hotel: r.hotel as string || '',
+    id: v.id, date: v.date, dayNumber: v.day_number, title: v.title, subtitle: v.subtitle,
+    meals: v.meals, hotel: v.hotel,
     activities: acts.map(mapActivity).sort((a, b) => a.time.localeCompare(b.time)),
   }
 }
 
-function mapChecklist(r: Record<string, unknown>): ChecklistItem {
+function mapChecklist(r: unknown): ChecklistItem {
+  const v = checklistRowSchema.parse(r)
+  return { id: v.id, label: v.label, checked: v.checked, category: v.category }
+}
+
+function mapExpense(r: unknown): Expense {
+  const v = expenseRowSchema.parse(r)
   return {
-    id: r.id as string,
-    label: r.label as string || '',
-    checked: r.checked as boolean || false,
-    category: (r.category as ChecklistItem['category']) || 'custom',
+    id: v.id, title: v.title, amount: v.amount, currency: v.currency,
+    category: v.category, date: v.date, notes: v.notes,
   }
 }
 
-function mapExpense(r: Record<string, unknown>): Expense {
+function mapDocument(r: unknown): Document {
+  const v = documentRowSchema.parse(r)
   return {
-    id: r.id as string,
-    title: r.title as string || '',
-    amount: r.amount as number || 0,
-    currency: r.currency as string || 'PHP',
-    category: (r.category as Expense['category']) || 'other',
-    date: r.date as string || '',
-    notes: r.notes as string || '',
+    id: v.id, name: v.name, type: v.type, fileName: v.file_name,
+    fileType: v.file_type, fileSize: v.file_size, uploadedAt: v.uploaded_at,
+    dataUrl: v.data_url,
   }
 }
 
-function mapDocument(r: Record<string, unknown>): Document {
+function mapContact(r: unknown): EmergencyContact {
+  const v = contactRowSchema.parse(r)
   return {
-    id: r.id as string,
-    name: r.name as string || '',
-    type: (r.type as Document['type']) || 'other',
-    fileName: r.file_name as string || '',
-    fileType: r.file_type as string || '',
-    fileSize: r.file_size as number || 0,
-    uploadedAt: r.uploaded_at as string || '',
-    dataUrl: r.data_url as string || '',
+    id: v.id, name: v.name, role: v.role, phone: v.phone,
+    type: v.type, country: v.country, address: v.address, notes: v.notes,
   }
 }
 
-function mapContact(r: Record<string, unknown>): EmergencyContact {
+function mapLink(r: unknown): QuickLink {
+  const v = linkRowSchema.parse(r)
+  return { id: v.id, title: v.title, url: v.url, icon: v.icon, category: v.category }
+}
+
+function mapNote(r: unknown): Note {
+  const v = noteRowSchema.parse(r)
   return {
-    id: r.id as string,
-    name: r.name as string || '',
-    role: r.role as string || '',
-    phone: r.phone as string || '',
-    type: (r.type as EmergencyContact['type']) || 'personal',
-    country: r.country as string || '',
-    address: r.address as string || '',
-    notes: r.notes as string || '',
+    id: v.id, title: v.title, content: v.content, color: v.color,
+    createdAt: v.created_at, updatedAt: v.updated_at,
   }
 }
 
-function mapLink(r: Record<string, unknown>): QuickLink {
+function mapVisa(r: unknown): VisaInfo {
+  const v = visaRowSchema.parse(r)
   return {
-    id: r.id as string,
-    title: r.title as string || '',
-    url: r.url as string || '',
-    icon: r.icon as string || 'link',
-    category: (r.category as QuickLink['category']) || 'other',
+    id: v.id, country: v.country, visaType: v.visa_type, visaNumber: v.visa_number,
+    issueDate: v.issue_date, expiryDate: v.expiry_date, status: v.status, notes: v.notes,
   }
 }
 
-function mapNote(r: Record<string, unknown>): Note {
-  return {
-    id: r.id as string,
-    title: r.title as string || '',
-    content: r.content as string || '',
-    color: r.color as string || '#2563EB',
-    createdAt: r.created_at as string || '',
-    updatedAt: r.updated_at as string || '',
-  }
-}
-
-function mapVisa(r: Record<string, unknown>): VisaInfo {
-  return {
-    id: r.id as string,
-    country: r.country as string || '',
-    visaType: r.visa_type as string || '',
-    visaNumber: r.visa_number as string || '',
-    issueDate: r.issue_date as string || '',
-    expiryDate: r.expiry_date as string || '',
-    status: (r.status as VisaInfo['status']) || 'valid',
-    notes: r.notes as string || '',
-  }
-}
-
-function mapRate(r: Record<string, unknown>): CurrencyRate {
-  return {
-    from: r.from_currency as string,
-    to: r.to_currency as string,
-    rate: r.rate as number,
-    updatedAt: r.updated_at as string || '',
-  }
+function mapRate(r: unknown): CurrencyRate {
+  const v = rateRowSchema.parse(r)
+  return { from: v.from_currency, to: v.to_currency, rate: v.rate, updatedAt: v.updated_at }
 }
 
 // ── Sync helpers ──────────────────────────────────────────
@@ -176,6 +122,90 @@ async function syncTable(
   if (rows.length > 0) await supabase.from(table).insert(rows)
 }
 
+// Fetch all the per-trip child tables in parallel and assemble a TripData.
+// Shared between `getTripById` and `getTrip` to avoid duplication.
+async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripData> {
+  const tripRow = tripRowSchema.parse(tripRowRaw)
+  const tripId = tripRow.id
+
+  const [
+    { data: flights },
+    { data: hotels },
+    { data: days },
+    { data: checklist },
+    { data: expenses },
+    { data: documents },
+    { data: contacts },
+    { data: links },
+    { data: notes },
+    { data: passport },
+    { data: visas },
+    { data: rates },
+  ] = await Promise.all([
+    supabase.from('flights').select('*').eq('trip_id', tripId).order('sort_order'),
+    supabase.from('hotels').select('*').eq('trip_id', tripId).order('check_in'),
+    supabase.from('itinerary_days').select('*, itinerary_activities(*)').eq('trip_id', tripId).order('day_number'),
+    supabase.from('checklist_items').select('*').eq('trip_id', tripId).order('sort_order'),
+    supabase.from('expenses').select('*').eq('trip_id', tripId).order('created_at', { ascending: false }),
+    supabase.from('documents').select('*').eq('trip_id', tripId),
+    supabase.from('emergency_contacts').select('*').eq('trip_id', tripId),
+    supabase.from('quick_links').select('*').eq('trip_id', tripId).order('sort_order'),
+    supabase.from('notes').select('*').eq('trip_id', tripId).order('updated_at', { ascending: false }),
+    supabase.from('passport_info').select('*').eq('user_id', userId).maybeSingle(),
+    supabase.from('visas').select('*').eq('trip_id', tripId),
+    supabase.from('currency_rates').select('*').eq('user_id', userId),
+  ])
+
+  return {
+    tripInfo: {
+      id: tripRow.id,
+      name: tripRow.name,
+      destination: tripRow.destination,
+      startDate: tripRow.start_date,
+      endDate: tripRow.end_date,
+      coverImage: tripRow.cover_image,
+      description: tripRow.description,
+      status: tripRow.status,
+    },
+    settings: {
+      travelerName: tripRow.traveler_name,
+      profilePicture: tripRow.profile_picture,
+      theme: 'system',
+      homeCurrency: tripRow.home_currency,
+      language: tripRow.language,
+      totalBudget: tripRow.total_budget,
+    },
+    tourNotes: tripRow.tour_notes,
+    restrictions: tripRow.restrictions,
+    flights: (flights ?? []).map(mapFlight),
+    hotels: (hotels ?? []).map(mapHotel),
+    itinerary: (days ?? []).map(mapDay),
+    checklist: (checklist ?? []).map(mapChecklist),
+    expenses: (expenses ?? []).map(mapExpense),
+    documents: (documents ?? []).map(mapDocument),
+    emergencyContacts: (contacts ?? []).map(mapContact),
+    quickLinks: (links ?? []).map(mapLink),
+    notes: (notes ?? []).map(mapNote),
+    passport: passport
+      ? (() => {
+          const p = passportRowSchema.parse(passport)
+          return {
+            fullName: p.full_name,
+            passportNumber: p.passport_number,
+            nationality: p.nationality,
+            dateOfBirth: p.date_of_birth,
+            issueDate: p.issue_date,
+            expiryDate: p.expiry_date,
+            issuingCountry: p.issuing_country,
+          }
+        })()
+      : createEmptyTrip().passport,
+    visas: (visas ?? []).map(mapVisa),
+    currencyRates: (rates ?? []).map(mapRate),
+    lastUpdated: new Date().toISOString(),
+  }
+}
+
 // ── Main service ──────────────────────────────────────────
 
 export const storageService = {
@@ -186,15 +216,18 @@ export const storageService = {
       .select('id, name, destination, start_date, end_date, status, cover_image')
       .eq('user_id', userId)
       .order('start_date', { ascending: false })
-    return (data || []).map(r => ({
-      id: r.id as string,
-      name: r.name as string || '',
-      destination: r.destination as string || '',
-      startDate: r.start_date as string || '',
-      endDate: r.end_date as string || '',
-      status: (r.status as TripSummary['status']) || 'upcoming',
-      coverImage: r.cover_image as string || '',
-    }))
+    return (data ?? []).map(r => {
+      const v = tripSummaryRowSchema.parse(r)
+      return {
+        id: v.id,
+        name: v.name,
+        destination: v.destination,
+        startDate: v.start_date,
+        endDate: v.end_date,
+        status: v.status,
+        coverImage: v.cover_image,
+      }
+    })
   },
 
   async getTripById(userId: string, tripId: string): Promise<TripData> {
@@ -206,79 +239,20 @@ export const storageService = {
       .maybeSingle()
 
     if (!tripRow) return createEmptyTrip(tripId)
+    return assembleTrip(userId, tripRow)
+  },
 
-    // Parallel fetch all related data
-    const [
-      { data: flights },
-      { data: hotels },
-      { data: days },
-      { data: checklist },
-      { data: expenses },
-      { data: documents },
-      { data: contacts },
-      { data: links },
-      { data: notes },
-      { data: passport },
-      { data: visas },
-      { data: rates },
-    ] = await Promise.all([
-      supabase.from('flights').select('*').eq('trip_id', tripId).order('sort_order'),
-      supabase.from('hotels').select('*').eq('trip_id', tripId).order('check_in'),
-      supabase.from('itinerary_days').select('*, itinerary_activities(*)').eq('trip_id', tripId).order('day_number'),
-      supabase.from('checklist_items').select('*').eq('trip_id', tripId).order('sort_order'),
-      supabase.from('expenses').select('*').eq('trip_id', tripId).order('created_at', { ascending: false }),
-      supabase.from('documents').select('*').eq('trip_id', tripId),
-      supabase.from('emergency_contacts').select('*').eq('trip_id', tripId),
-      supabase.from('quick_links').select('*').eq('trip_id', tripId).order('sort_order'),
-      supabase.from('notes').select('*').eq('trip_id', tripId).order('updated_at', { ascending: false }),
-      supabase.from('passport_info').select('*').eq('user_id', userId).maybeSingle(),
-      supabase.from('visas').select('*').eq('trip_id', tripId),
-      supabase.from('currency_rates').select('*').eq('user_id', userId),
-    ])
+  async getTrip(userId: string): Promise<TripData> {
+    const { data: tripRow } = await supabase
+      .from('trips')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
-    return {
-      tripInfo: {
-        id: tripRow.id as string,
-        name: tripRow.name as string || '',
-        destination: tripRow.destination as string || '',
-        startDate: tripRow.start_date as string || '',
-        endDate: tripRow.end_date as string || '',
-        coverImage: tripRow.cover_image as string || '',
-        description: tripRow.description as string || '',
-        status: (tripRow.status as 'upcoming' | 'active' | 'completed') || 'upcoming',
-      },
-      settings: {
-        travelerName: tripRow.traveler_name as string || '',
-        profilePicture: tripRow.profile_picture as string || '',
-        theme: 'system',
-        homeCurrency: tripRow.home_currency as string || 'PHP',
-        language: tripRow.language as string || 'en',
-        totalBudget: tripRow.total_budget as number || 0,
-      },
-      tourNotes: (tripRow.tour_notes as string[]) || [],
-      restrictions: (tripRow.restrictions as string[]) || [],
-      flights: (flights || []).map(r => mapFlight(r as Record<string, unknown>)),
-      hotels: (hotels || []).map(r => mapHotel(r as Record<string, unknown>)),
-      itinerary: (days || []).map(r => mapDay(r as Record<string, unknown>)),
-      checklist: (checklist || []).map(r => mapChecklist(r as Record<string, unknown>)),
-      expenses: (expenses || []).map(r => mapExpense(r as Record<string, unknown>)),
-      documents: (documents || []).map(r => mapDocument(r as Record<string, unknown>)),
-      emergencyContacts: (contacts || []).map(r => mapContact(r as Record<string, unknown>)),
-      quickLinks: (links || []).map(r => mapLink(r as Record<string, unknown>)),
-      notes: (notes || []).map(r => mapNote(r as Record<string, unknown>)),
-      passport: passport ? {
-        fullName: passport.full_name as string || '',
-        passportNumber: passport.passport_number as string || '',
-        nationality: passport.nationality as string || '',
-        dateOfBirth: passport.date_of_birth as string || '',
-        issueDate: passport.issue_date as string || '',
-        expiryDate: passport.expiry_date as string || '',
-        issuingCountry: passport.issuing_country as string || '',
-      } : createEmptyTrip().passport,
-      visas: (visas || []).map(r => mapVisa(r as Record<string, unknown>)),
-      currencyRates: (rates || []).map(r => mapRate(r as Record<string, unknown>)),
-      lastUpdated: new Date().toISOString(),
-    }
+    if (!tripRow) return createEmptyTrip()
+    return assembleTrip(userId, tripRow)
   },
 
   async createTrip(userId: string, info: { name: string; destination: string; startDate: string; endDate: string; description: string }): Promise<string> {
@@ -303,93 +277,6 @@ export const storageService = {
 
   async deleteTripById(tripId: string, userId: string): Promise<void> {
     await supabase.from('trips').delete().eq('id', tripId).eq('user_id', userId)
-  },
-
-  async getTrip(userId: string): Promise<TripData> {
-    // Get most recent trip for user
-    const { data: tripRow } = await supabase
-      .from('trips')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (!tripRow) return createEmptyTrip()
-    const tripId = tripRow.id as string
-
-    // Parallel fetch all related data
-    const [
-      { data: flights },
-      { data: hotels },
-      { data: days },
-      { data: checklist },
-      { data: expenses },
-      { data: documents },
-      { data: contacts },
-      { data: links },
-      { data: notes },
-      { data: passport },
-      { data: visas },
-      { data: rates },
-    ] = await Promise.all([
-      supabase.from('flights').select('*').eq('trip_id', tripId).order('sort_order'),
-      supabase.from('hotels').select('*').eq('trip_id', tripId).order('check_in'),
-      supabase.from('itinerary_days').select('*, itinerary_activities(*)').eq('trip_id', tripId).order('day_number'),
-      supabase.from('checklist_items').select('*').eq('trip_id', tripId).order('sort_order'),
-      supabase.from('expenses').select('*').eq('trip_id', tripId).order('created_at', { ascending: false }),
-      supabase.from('documents').select('*').eq('trip_id', tripId),
-      supabase.from('emergency_contacts').select('*').eq('trip_id', tripId),
-      supabase.from('quick_links').select('*').eq('trip_id', tripId).order('sort_order'),
-      supabase.from('notes').select('*').eq('trip_id', tripId).order('updated_at', { ascending: false }),
-      supabase.from('passport_info').select('*').eq('user_id', userId).maybeSingle(),
-      supabase.from('visas').select('*').eq('trip_id', tripId),
-      supabase.from('currency_rates').select('*').eq('user_id', userId),
-    ])
-
-    return {
-      tripInfo: {
-        id: tripRow.id as string,
-        name: tripRow.name as string || '',
-        destination: tripRow.destination as string || '',
-        startDate: tripRow.start_date as string || '',
-        endDate: tripRow.end_date as string || '',
-        coverImage: tripRow.cover_image as string || '',
-        description: tripRow.description as string || '',
-        status: (tripRow.status as 'upcoming' | 'active' | 'completed') || 'upcoming',
-      },
-      settings: {
-        travelerName: tripRow.traveler_name as string || '',
-        profilePicture: tripRow.profile_picture as string || '',
-        theme: 'system',
-        homeCurrency: tripRow.home_currency as string || 'PHP',
-        language: tripRow.language as string || 'en',
-        totalBudget: tripRow.total_budget as number || 0,
-      },
-      tourNotes: (tripRow.tour_notes as string[]) || [],
-      restrictions: (tripRow.restrictions as string[]) || [],
-      flights: (flights || []).map(r => mapFlight(r as Record<string, unknown>)),
-      hotels: (hotels || []).map(r => mapHotel(r as Record<string, unknown>)),
-      itinerary: (days || []).map(r => mapDay(r as Record<string, unknown>)),
-      checklist: (checklist || []).map(r => mapChecklist(r as Record<string, unknown>)),
-      expenses: (expenses || []).map(r => mapExpense(r as Record<string, unknown>)),
-      documents: (documents || []).map(r => mapDocument(r as Record<string, unknown>)),
-      emergencyContacts: (contacts || []).map(r => mapContact(r as Record<string, unknown>)),
-      quickLinks: (links || []).map(r => mapLink(r as Record<string, unknown>)),
-      notes: (notes || []).map(r => mapNote(r as Record<string, unknown>)),
-      passport: passport ? {
-        fullName: passport.full_name as string || '',
-        passportNumber: passport.passport_number as string || '',
-        nationality: passport.nationality as string || '',
-        dateOfBirth: passport.date_of_birth as string || '',
-        issueDate: passport.issue_date as string || '',
-        expiryDate: passport.expiry_date as string || '',
-        issuingCountry: passport.issuing_country as string || '',
-      } : createEmptyTrip().passport,
-      visas: (visas || []).map(r => mapVisa(r as Record<string, unknown>)),
-      currencyRates: (rates || []).map(r => mapRate(r as Record<string, unknown>)),
-      lastUpdated: new Date().toISOString(),
-    }
   },
 
   async saveTrip(userId: string, trip: TripData): Promise<void> {
