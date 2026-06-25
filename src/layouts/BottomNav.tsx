@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   LayoutDashboard, Plane, Building2, FileText, ListChecks,
-  DollarSign, AlertCircle, StickyNote, Map, Link2, Settings, MapPin
+  DollarSign, AlertCircle, StickyNote, Map, Link2, Settings, MapPin, Camera
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
@@ -12,6 +12,7 @@ const navItems = [
   { to: '/hotels', icon: Building2, label: 'Hotels' },
   { to: '/timeline', icon: Map, label: 'Timeline' },
   { to: '/map', icon: MapPin, label: 'Explore' },
+  { to: '/photos', icon: Camera, label: 'Photos' },
   { to: '/checklist', icon: ListChecks, label: 'Checklist' },
   { to: '/expenses', icon: DollarSign, label: 'Expenses' },
   { to: '/documents', icon: FileText, label: 'Docs' },
