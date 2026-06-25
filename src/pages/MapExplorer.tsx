@@ -118,10 +118,10 @@ async function fetchPOIs(lat: number, lon: number, categoryId: string, radius: n
 );
 out center 40;`
 
-  const res = await fetch('/api/overpass', {
+  // overpass.kumi.systems is a public CORS-enabled OSM/Overpass mirror
+  const res = await fetch('https://overpass.kumi.systems/api/interpreter', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: overpassQuery }),
+    body: overpassQuery,
   })
   if (!res.ok) throw new Error('Overpass API error')
   const data = await res.json()
