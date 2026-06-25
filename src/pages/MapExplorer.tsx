@@ -46,8 +46,7 @@ const CATEGORIES = [
     icon: UtensilsCrossed,
     color: '#f97316',
     markerColor: '#f97316',
-    query: `node["amenity"~"^(restaurant|cafe|fast_food|food_court|bar|pub|bakery)$"](around:{R},{LAT},{LON});
-            way["amenity"~"^(restaurant|cafe|fast_food|food_court|bar|pub|bakery)$"](around:{R},{LAT},{LON});`,
+    query: `nwr["amenity"~"restaurant|cafe|fast_food|food_court|bar|pub|bakery"](around:{R},{LAT},{LON});`,
   },
   {
     id: 'shopping',
@@ -55,8 +54,7 @@ const CATEGORIES = [
     icon: ShoppingBag,
     color: '#8b5cf6',
     markerColor: '#8b5cf6',
-    query: `node["shop"~"^(mall|supermarket|department_store|clothes|shoes|jewelry|convenience|fashion)$"](around:{R},{LAT},{LON});
-            way["shop"~"^(mall|supermarket|department_store|clothes|shoes|jewelry|convenience|fashion)$"](around:{R},{LAT},{LON});`,
+    query: `nwr["shop"~"mall|supermarket|department_store|clothes|shoes|jewelry|convenience"](around:{R},{LAT},{LON});`,
   },
   {
     id: 'attractions',
@@ -64,9 +62,7 @@ const CATEGORIES = [
     icon: Camera,
     color: '#06b6d4',
     markerColor: '#06b6d4',
-    query: `node["tourism"~"^(attraction|museum|viewpoint|artwork|gallery|theme_park|zoo)$"](around:{R},{LAT},{LON});
-            way["tourism"~"^(attraction|museum|viewpoint|artwork|gallery|theme_park|zoo)$"](around:{R},{LAT},{LON});
-            node["historic"](around:{R},{LAT},{LON});`,
+    query: `nwr["tourism"~"attraction|museum|viewpoint|gallery|theme_park|zoo"](around:{R},{LAT},{LON});`,
   },
   {
     id: 'souvenirs',
@@ -74,8 +70,7 @@ const CATEGORIES = [
     icon: Gift,
     color: '#ec4899',
     markerColor: '#ec4899',
-    query: `node["shop"~"^(gift|souvenir|art|craft|books|antiques)$"](around:{R},{LAT},{LON});
-            way["shop"~"^(gift|souvenir|art|craft|books|antiques)$"](around:{R},{LAT},{LON});`,
+    query: `nwr["shop"~"gift|souvenir|art|craft|books|antiques"](around:{R},{LAT},{LON});`,
   },
   {
     id: 'transport',
@@ -83,9 +78,7 @@ const CATEGORIES = [
     icon: Bus,
     color: '#10b981',
     markerColor: '#10b981',
-    query: `node["public_transport"~"^(station|stop_position)$"](around:{R},{LAT},{LON});
-            node["railway"~"^(station|subway_entrance|tram_stop)$"](around:{R},{LAT},{LON});
-            node["amenity"~"^(bus_station|ferry_terminal|taxi)$"](around:{R},{LAT},{LON});`,
+    query: `nwr["railway"~"station|subway_entrance|tram_stop"](around:{R},{LAT},{LON});`,
   },
   {
     id: 'pharmacy',
@@ -93,8 +86,7 @@ const CATEGORIES = [
     icon: Pill,
     color: '#ef4444',
     markerColor: '#ef4444',
-    query: `node["amenity"~"^(pharmacy|hospital|clinic|doctors|dentist)$"](around:{R},{LAT},{LON});
-            way["amenity"~"^(pharmacy|hospital|clinic)$"](around:{R},{LAT},{LON});`,
+    query: `nwr["amenity"~"pharmacy|hospital|clinic|doctors|dentist"](around:{R},{LAT},{LON});`,
   },
 ]
 
@@ -111,16 +103,16 @@ async function fetchPOIs(lat: number, lon: number, categoryId: string, radius: n
     .replace(/{LAT}/g, String(lat))
     .replace(/{LON}/g, String(lon))
 
-  const overpassQuery = `[out:json][timeout:20];
+  const overpassQuery = `[out:json][timeout:15];
 (
   ${queryBody}
 );
-out center 40;`
+out center 25;`
 
-  // overpass.kumi.systems is a public CORS-enabled OSM/Overpass mirror
-  const res = await fetch('https://overpass.kumi.systems/api/interpreter', {
+  const res = await fetch('/api/overpass', {
     method: 'POST',
-    body: overpassQuery,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: overpassQuery }),
   })
   if (!res.ok) throw new Error('Overpass API error')
   const data = await res.json()

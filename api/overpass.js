@@ -10,11 +10,16 @@ export default async function handler(req, res) {
     const { query } = req.body
     if (!query) return res.status(400).json({ error: 'Missing query' })
 
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 18000)
+
     const response = await fetch('https://overpass-api.de/api/interpreter', {
       method: 'POST',
       body: query,
       headers: { 'Content-Type': 'text/plain' },
+      signal: controller.signal,
     })
+    clearTimeout(timeout)
 
     if (!response.ok) {
       return res.status(response.status).json({ error: 'Overpass API error' })
