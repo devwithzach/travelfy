@@ -5,10 +5,13 @@ import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
 import markerIcon from 'leaflet/dist/images/marker-icon.png'
 import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import { useTrip } from '@/contexts/TripContext'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   MapPin, UtensilsCrossed, ShoppingBag, Camera, Gift,
   Bus, Pill, ChevronDown, Loader2, Navigation, X, Clock, Footprints,
-  ArrowUp, ArrowLeft, ArrowRight, ArrowUpLeft, ArrowUpRight, RotateCcw
+  ArrowUp, ArrowLeft, ArrowRight, ArrowUpLeft, ArrowUpRight, RotateCcw,
+  Bookmark, BookmarkCheck, Star
 } from 'lucide-react'
 
 // Fix Leaflet default icon issue with Vite
@@ -45,6 +48,21 @@ interface NavStep {
   lon: number
   maneuverType: string
   maneuverModifier: string
+}
+
+interface SavedPlace {
+  id: string
+  user_id: string
+  trip_id: string
+  osm_id: number
+  name: string
+  type: string
+  lat: number
+  lon: number
+  tags: Record<string, string>
+  rating: number
+  notes: string
+  saved_at: string
 }
 
 // ── Categories ───────────────────────────────────────────────
@@ -97,6 +115,14 @@ const CATEGORIES = [
     color: '#ef4444',
     markerColor: '#ef4444',
     query: `nwr["amenity"~"pharmacy|hospital|clinic|doctors|dentist"](around:{R},{LAT},{LON});`,
+  },
+  {
+    id: 'saved',
+    label: 'Saved',
+    icon: Bookmark,
+    color: '#f59e0b',
+    markerColor: '#f59e0b',
+    query: '', // handled specially
   },
 ]
 
@@ -214,12 +240,14 @@ function TurnArrow({ modifier }: { modifier: string }) {
 
 export default function MapExplorer() {
   const { trip } = useTrip()
+  const { user } = useAuth()
   const mapRef = useRef<L.Map | null>(null)
   const mapElRef = useRef<HTMLDivElement>(null)
   const markersRef = useRef<L.Layer[]>([])
   const hotelMarkersRef = useRef<L.Layer[]>([])
   const watchIdRef = useRef<number | null>(null)
   const userMarkerRef = useRef<L.CircleMarker | null>(null)
+  const savedMarkersRef = useRef<L.Layer[]>([])
 
   // Build location list from trip data
   const locations: Location[] = [
@@ -255,6 +283,13 @@ export default function MapExplorer() {
   const [navSteps, setNavSteps] = useState<NavStep[]>([])
   const [currentStepIdx, setCurrentStepIdx] = useState(0)
   const [userPos, setUserPos] = useState<[number, number] | null>(null)
+
+  // Save & Rate state
+  const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([])
+  const [saveSheet, setSaveSheet] = useState<POI | null>(null)
+  const [saveRating, setSaveRating] = useState(5)
+  const [saveNotes, setSaveNotes] = useState('')
+  const [saving, setSaving] = useState(false)
 
   // Init map
   useEffect(() => {
@@ -338,14 +373,97 @@ export default function MapExplorer() {
     }
   }, [navMode, navSteps])
 
+  // Load saved places on mount
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('saved_places')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('trip_id', trip.tripInfo.id)
+      .then(({ data }) => setSavedPlaces((data as SavedPlace[]) || []))
+  }, [user, trip.tripInfo.id])
+
   // Clear POI markers
   const clearMarkers = useCallback(() => {
     markersRef.current.forEach(m => mapRef.current?.removeLayer(m))
     markersRef.current = []
   }, [])
 
+  // Check if a POI is already saved
+  const isSaved = useCallback((osmId: number) =>
+    savedPlaces.some(s => s.osm_id === osmId), [savedPlaces])
+
+  // Save a POI
+  const savePlace = useCallback(async () => {
+    if (!saveSheet || !user) return
+    setSaving(true)
+    const { data, error } = await supabase.from('saved_places').insert({
+      user_id: user.id,
+      trip_id: trip.tripInfo.id,
+      osm_id: saveSheet.id,
+      name: saveSheet.name,
+      type: saveSheet.type,
+      lat: saveSheet.lat,
+      lon: saveSheet.lon,
+      tags: saveSheet.tags,
+      rating: saveRating,
+      notes: saveNotes,
+    }).select().single()
+    if (!error && data) setSavedPlaces(prev => [...prev, data as SavedPlace])
+    setSaving(false)
+    setSaveSheet(null)
+    setSaveNotes('')
+    setSaveRating(5)
+  }, [saveSheet, user, trip.tripInfo.id, saveRating, saveNotes])
+
+  // Remove a saved place
+  const unsavePlace = useCallback(async (osmId: number) => {
+    if (!user) return
+    const place = savedPlaces.find(s => s.osm_id === osmId)
+    if (!place) return
+    await supabase.from('saved_places').delete().eq('id', place.id)
+    setSavedPlaces(prev => prev.filter(s => s.osm_id !== osmId))
+  }, [user, savedPlaces])
+
   // Search POIs
   const searchCategory = useCallback(async (categoryId: string) => {
+    if (categoryId === 'saved') {
+      if (activeCategory === 'saved') {
+        clearMarkers()
+        setActiveCategory(null)
+        setPois([])
+        setShowResults(false)
+        return
+      }
+      setActiveCategory('saved')
+      clearMarkers()
+      const savedAsPois: POI[] = savedPlaces.map(s => ({
+        id: s.osm_id,
+        lat: s.lat,
+        lon: s.lon,
+        name: s.name,
+        type: s.type,
+        tags: s.tags,
+        distance: haversine(selectedLocation.lat, selectedLocation.lon, s.lat, s.lon),
+      }))
+      setPois(savedAsPois)
+      setShowResults(true)
+      savedAsPois.forEach(poi => {
+        const icon = createColorMarker('#f59e0b')
+        const marker = L.marker([poi.lat, poi.lon], { icon })
+          .addTo(mapRef.current!)
+          .bindPopup(`<b>${poi.name}</b><br/><span style="color:#f59e0b">⭐ Saved</span>`)
+        marker.on('click', () => setSelectedPoi(poi))
+        markersRef.current.push(marker)
+      })
+      if (savedAsPois.length > 0 && mapRef.current) {
+        const group = L.featureGroup(markersRef.current)
+        mapRef.current.fitBounds(group.getBounds().pad(0.1), { maxZoom: 16 })
+      }
+      return
+    }
+
     if (activeCategory === categoryId) {
       clearMarkers()
       setActiveCategory(null)
@@ -391,7 +509,7 @@ export default function MapExplorer() {
     } finally {
       setLoading(false)
     }
-  }, [activeCategory, selectedLocation, radius, clearMarkers])
+  }, [activeCategory, selectedLocation, radius, clearMarkers, savedPlaces])
 
   const flyToPoi = (poi: POI) => {
     setSelectedPoi(poi)
@@ -669,6 +787,38 @@ export default function MapExplorer() {
               <p className="text-sm font-bold leading-tight">{selectedPoi.name}</p>
               <p className="text-xs text-muted-foreground capitalize mt-0.5">{selectedPoi.type.replace(/_/g, ' ')}</p>
               <p className="text-xs text-primary font-medium mt-1">{selectedPoi.distance}m away</p>
+              {/* Save / Unsave button */}
+              <button
+                onClick={() => {
+                  if (selectedPoi && isSaved(selectedPoi.id)) {
+                    unsavePlace(selectedPoi.id)
+                  } else if (selectedPoi) {
+                    setSaveRating(5)
+                    setSaveNotes('')
+                    setSaveSheet(selectedPoi)
+                  }
+                }}
+                className={`flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+                  selectedPoi && isSaved(selectedPoi.id)
+                    ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600'
+                    : 'bg-muted text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {selectedPoi && isSaved(selectedPoi.id)
+                  ? <><BookmarkCheck className="h-3.5 w-3.5" /> Saved</>
+                  : <><Bookmark className="h-3.5 w-3.5" /> Save Place</>
+                }
+              </button>
+              {selectedPoi && isSaved(selectedPoi.id) && (() => {
+                const sp = savedPlaces.find(s => s.osm_id === selectedPoi.id)
+                return sp ? (
+                  <div className="flex gap-0.5 mt-1">
+                    {[1,2,3,4,5].map(n => (
+                      <Star key={n} className={`h-3 w-3 ${n <= sp.rating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}`} />
+                    ))}
+                  </div>
+                ) : null
+              })()}
               {selectedPoi.tags.opening_hours && (
                 <p className="text-xs text-muted-foreground mt-1">🕐 {selectedPoi.tags.opening_hours}</p>
               )}
@@ -714,6 +864,67 @@ export default function MapExplorer() {
               )}
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Save Place Sheet */}
+      <AnimatePresence>
+        {saveSheet && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[1010] bg-black/50"
+              onClick={() => setSaveSheet(null)}
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28 }}
+              className="fixed bottom-0 left-0 right-0 z-[1011] bg-background rounded-t-3xl p-5 pb-8 shadow-2xl"
+            >
+              <div className="w-10 h-1 rounded-full bg-border mx-auto mb-4" />
+              <h3 className="font-bold text-base mb-0.5">{saveSheet.name}</h3>
+              <p className="text-xs text-muted-foreground capitalize mb-4">{saveSheet.type.replace(/_/g, ' ')}</p>
+
+              {/* Star rating */}
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Rating</p>
+              <div className="flex gap-2 mb-4">
+                {[1,2,3,4,5].map(n => (
+                  <button key={n} onClick={() => setSaveRating(n)} className="focus:outline-none">
+                    <Star className={`h-8 w-8 transition-colors ${n <= saveRating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}`} />
+                  </button>
+                ))}
+              </div>
+
+              {/* Notes */}
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Notes (optional)</p>
+              <textarea
+                value={saveNotes}
+                onChange={e => setSaveNotes(e.target.value)}
+                placeholder="What did you think? Great food, must visit again..."
+                rows={2}
+                className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 mb-4"
+              />
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSaveSheet(null)}
+                  className="flex-1 py-3 rounded-xl bg-muted text-sm font-medium"
+                >Cancel</button>
+                <button
+                  onClick={savePlace}
+                  disabled={saving}
+                  className="flex-1 py-3 rounded-xl bg-amber-500 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookmarkCheck className="h-4 w-4" />}
+                  Save Place
+                </button>
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
     </div>
