@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Map, Plus, Edit2, Trash2, ChevronDown, ChevronUp,
-  Utensils, Bus, Landmark, Hotel, ShoppingBag, Clock, Star, MoreHorizontal
+  Utensils, Bus, Landmark, Hotel, ShoppingBag, Clock, Star, MoreHorizontal, Check
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import type { ItineraryDay, ItineraryActivity } from '@/types'
@@ -26,6 +26,16 @@ const activityTypeConfig = {
   shopping: { label: 'Shopping', icon: ShoppingBag, color: 'text-pink-500 bg-pink-100 dark:bg-pink-900/30' },
   free: { label: 'Free Time', icon: Star, color: 'text-cyan-500 bg-cyan-100 dark:bg-cyan-900/30' },
   other: { label: 'Other', icon: MoreHorizontal, color: 'text-gray-500 bg-gray-100 dark:bg-gray-800' },
+}
+
+// An activity is "done" if its date + time is in the past.
+// If the activity has no time, fall back to end-of-day for that date.
+function isActivityDone(date: string, time: string, now: Date): boolean {
+  if (!date) return false
+  const dateStr = time ? `${date}T${time}` : `${date}T23:59`
+  const ts = new Date(dateStr).getTime()
+  if (Number.isNaN(ts)) return false
+  return ts < now.getTime()
 }
 
 const defaultActivity = (): ItineraryActivity => ({
@@ -55,6 +65,13 @@ export default function Timeline() {
   const [actDialogOpen, setActDialogOpen] = useState(false)
   const [editingDay, setEditingDay] = useState<ItineraryDay | null>(null)
   const [editingAct, setEditingAct] = useState<{ dayId: string; activity: ItineraryActivity } | null>(null)
+
+  // Tick "now" once a minute so done states refresh while the page is open.
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(id)
+  }, [])
 
   const toggleDay = (id: string) => {
     setExpandedDays(prev => {
@@ -145,7 +162,9 @@ export default function Timeline() {
         <AnimatePresence>
           {trip.itinerary.map((day, i) => {
             const isExpanded = expandedDays.has(day.id)
-            const TypeIcon = activityTypeConfig
+            const doneCount = day.activities.filter(a => isActivityDone(day.date, a.time, now)).length
+            const total = day.activities.length
+            const allDone = total > 0 && doneCount === total
             return (
               <motion.div
                 key={day.id}
@@ -154,17 +173,20 @@ export default function Timeline() {
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ delay: i * 0.05 }}
               >
-                <Card className="overflow-hidden">
+                <Card className={cn('overflow-hidden', allDone && 'opacity-70')}>
                   {/* Day Header */}
                   <div
                     className="flex items-center p-4 cursor-pointer select-none"
                     onClick={() => toggleDay(day.id)}
                   >
-                    <div className="w-10 h-10 rounded-xl gradient-brand flex items-center justify-center text-white font-bold mr-3 shrink-0">
-                      {day.dayNumber}
+                    <div className={cn(
+                      'w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold mr-3 shrink-0',
+                      allDone ? 'bg-emerald-500' : 'gradient-brand'
+                    )}>
+                      {allDone ? <Check className="h-5 w-5" strokeWidth={3} /> : day.dayNumber}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-sm truncate">{day.title}</p>
+                      <p className={cn('font-bold text-sm truncate', allDone && 'line-through')}>{day.title}</p>
                       <p className="text-xs text-muted-foreground">{day.date ? formatDayDate(day.date) : day.subtitle}</p>
                       {day.meals.length > 0 && (
                         <div className="flex gap-1 mt-1">
@@ -175,7 +197,12 @@ export default function Timeline() {
                       )}
                     </div>
                     <div className="flex items-center gap-1 ml-2">
-                      <span className="text-xs text-muted-foreground">{day.activities.length}</span>
+                      <span className={cn(
+                        'text-xs',
+                        allDone ? 'text-emerald-600 font-semibold' : 'text-muted-foreground'
+                      )}>
+                        {total > 0 ? `${doneCount}/${total}` : '0'}
+                      </span>
                       <Button
                         variant="ghost"
                         size="icon-sm"
@@ -210,11 +237,18 @@ export default function Timeline() {
                           {day.activities.map((act, ai) => {
                             const cfg = activityTypeConfig[act.type]
                             const Icon = cfg.icon
+                            const done = isActivityDone(day.date, act.time, now)
                             return (
-                              <div key={act.id} className="flex items-start gap-3">
+                              <div key={act.id} className={cn('flex items-start gap-3', done && 'opacity-50')}>
                                 <div className="flex flex-col items-center">
-                                  <div className={cn('p-1.5 rounded-lg shrink-0', cfg.color.split(' ').slice(1).join(' '))}>
-                                    <Icon className={cn('h-3.5 w-3.5', cfg.color.split(' ')[0])} />
+                                  <div className={cn(
+                                    'p-1.5 rounded-lg shrink-0 relative',
+                                    done ? 'bg-emerald-100 dark:bg-emerald-900/30' : cfg.color.split(' ').slice(1).join(' ')
+                                  )}>
+                                    {done
+                                      ? <Check className="h-3.5 w-3.5 text-emerald-600" strokeWidth={3} />
+                                      : <Icon className={cn('h-3.5 w-3.5', cfg.color.split(' ')[0])} />
+                                    }
                                   </div>
                                   {ai < day.activities.length - 1 && (
                                     <div className="w-[2px] h-4 bg-border mt-1" />
@@ -235,7 +269,7 @@ export default function Timeline() {
                                           </span>
                                         </div>
                                       )}
-                                      <p className="text-sm font-medium truncate">{act.title}</p>
+                                      <p className={cn('text-sm font-medium truncate', done && 'line-through')}>{act.title}</p>
                                       {act.description && (
                                         <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{act.description}</p>
                                       )}
