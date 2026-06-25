@@ -1,8 +1,10 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { TripProvider } from '@/contexts/TripContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import MainLayout from '@/layouts/MainLayout'
+import Login from '@/pages/Login'
 import Dashboard from '@/pages/Dashboard'
 import Flights from '@/pages/Flights'
 import Hotels from '@/pages/Hotels'
@@ -16,34 +18,64 @@ import Documents from '@/pages/Documents'
 import Passport from '@/pages/Passport'
 import Currency from '@/pages/Currency'
 import Settings from '@/pages/Settings'
+import { motion } from 'framer-motion'
+import { Plane } from 'lucide-react'
 
 const queryClient = new QueryClient()
+
+function AppRoutes() {
+  const { user, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+          className="w-12 h-12 rounded-2xl gradient-brand flex items-center justify-center"
+        >
+          <Plane className="h-6 w-6 text-white" />
+        </motion.div>
+        <p className="text-sm text-muted-foreground">Loading Travelfy...</p>
+      </div>
+    )
+  }
+
+  if (!user) return <Login />
+
+  return (
+    <TripProvider>
+      <Routes>
+        <Route element={<MainLayout />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/flights" element={<Flights />} />
+          <Route path="/hotels" element={<Hotels />} />
+          <Route path="/timeline" element={<Timeline />} />
+          <Route path="/checklist" element={<Checklist />} />
+          <Route path="/expenses" element={<Expenses />} />
+          <Route path="/documents" element={<Documents />} />
+          <Route path="/passport" element={<Passport />} />
+          <Route path="/currency" element={<Currency />} />
+          <Route path="/emergency" element={<Emergency />} />
+          <Route path="/notes" element={<Notes />} />
+          <Route path="/links" element={<QuickLinks />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </TripProvider>
+  )
+}
 
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <TripProvider>
+        <AuthProvider>
           <BrowserRouter>
-            <Routes>
-              <Route element={<MainLayout />}>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/flights" element={<Flights />} />
-                <Route path="/hotels" element={<Hotels />} />
-                <Route path="/timeline" element={<Timeline />} />
-                <Route path="/checklist" element={<Checklist />} />
-                <Route path="/expenses" element={<Expenses />} />
-                <Route path="/documents" element={<Documents />} />
-                <Route path="/passport" element={<Passport />} />
-                <Route path="/currency" element={<Currency />} />
-                <Route path="/emergency" element={<Emergency />} />
-                <Route path="/notes" element={<Notes />} />
-                <Route path="/links" element={<QuickLinks />} />
-                <Route path="/settings" element={<Settings />} />
-              </Route>
-            </Routes>
+            <AppRoutes />
           </BrowserRouter>
-        </TripProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   )

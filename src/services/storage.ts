@@ -1,46 +1,44 @@
+import { supabase } from '@/lib/supabase'
 import type { TripData } from '@/types'
 import { sampleTrip } from '@/data/sampleTrip'
 
-const STORAGE_KEY = 'travelfy_trip_data'
-
 export const storageService = {
-  getTrip(): TripData {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (!raw) return { ...sampleTrip }
-      const parsed = JSON.parse(raw) as TripData
-      return parsed
-    } catch {
-      return { ...sampleTrip }
-    }
+  async getTrip(userId: string): Promise<TripData> {
+    const { data, error } = await supabase
+      .from('trips')
+      .select('data')
+      .eq('user_id', userId)
+      .single()
+
+    if (error || !data) return { ...sampleTrip }
+    return data.data as TripData
   },
 
-  saveTrip(data: TripData): void {
-    try {
-      const toSave = { ...data, lastUpdated: new Date().toISOString() }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
-    } catch (e) {
-      console.error('Failed to save trip data:', e)
-    }
+  async saveTrip(userId: string, trip: TripData): Promise<void> {
+    const payload = { ...trip, lastUpdated: new Date().toISOString() }
+    await supabase
+      .from('trips')
+      .upsert({ user_id: userId, data: payload }, { onConflict: 'user_id' })
   },
 
-  exportTrip(): string {
-    const data = storageService.getTrip()
-    return JSON.stringify(data, null, 2)
+  async resetTrip(userId: string): Promise<void> {
+    await supabase
+      .from('trips')
+      .upsert({ user_id: userId, data: { ...sampleTrip } }, { onConflict: 'user_id' })
   },
 
-  importTrip(json: string): boolean {
+  exportTrip(trip: TripData): string {
+    return JSON.stringify(trip, null, 2)
+  },
+
+  async importTrip(userId: string, json: string): Promise<boolean> {
     try {
       const parsed = JSON.parse(json) as TripData
       if (!parsed.tripInfo || !parsed.flights) return false
-      storageService.saveTrip(parsed)
+      await storageService.saveTrip(userId, parsed)
       return true
     } catch {
       return false
     }
-  },
-
-  resetTrip(): void {
-    localStorage.removeItem(STORAGE_KEY)
   },
 }

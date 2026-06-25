@@ -3,10 +3,11 @@ import { motion } from 'framer-motion'
 import {
   Settings as SettingsIcon, User, Moon, Sun, Monitor,
   Download, Upload, Trash2, Check, Globe, DollarSign,
-  ChevronRight, AlertTriangle
+  ChevronRight, AlertTriangle, LogOut
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import { useTheme } from '@/contexts/ThemeContext'
+import { useAuth } from '@/contexts/AuthContext'
 import PageHeader from '@/components/common/PageHeader'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,6 +23,7 @@ const CURRENCIES = ['PHP', 'HKD', 'MOP', 'USD', 'EUR', 'SGD', 'JPY']
 export default function Settings() {
   const { trip, updateTrip, resetTrip, exportTrip, importTrip } = useTrip()
   const { theme, setTheme } = useTheme()
+  const { user, signOut } = useAuth()
   const [resetDialogOpen, setResetDialogOpen] = useState(false)
   const [importResult, setImportResult] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
@@ -50,9 +52,9 @@ export default function Settings() {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = ev => {
+    reader.onload = async ev => {
       const json = ev.target?.result as string
-      const ok = importTrip(json)
+      const ok = await importTrip(json)
       setImportResult(ok ? '✓ Trip data imported successfully!' : '✗ Invalid file format')
       setTimeout(() => setImportResult(null), 3000)
     }
@@ -88,10 +90,13 @@ export default function Settings() {
               <div className="w-14 h-14 rounded-2xl gradient-brand flex items-center justify-center text-white text-xl font-bold">
                 {settingsBuffer.travelerName.charAt(0).toUpperCase() || 'T'}
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="font-bold">{settingsBuffer.travelerName || 'Traveler'}</p>
-                <p className="text-xs text-muted-foreground">{trip.tripInfo.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
               </div>
+              <Button variant="ghost" size="icon-sm" onClick={signOut} className="text-muted-foreground hover:text-destructive">
+                <LogOut className="h-4 w-4" />
+              </Button>
             </div>
 
             <div className="space-y-3">
@@ -288,7 +293,7 @@ export default function Settings() {
           </p>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setResetDialogOpen(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => { resetTrip(); setResetDialogOpen(false) }}>
+            <Button variant="destructive" onClick={async () => { await resetTrip(); setResetDialogOpen(false) }}>
               Reset Everything
             </Button>
           </DialogFooter>
