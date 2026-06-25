@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
 import type { TripData } from '@/types'
 import { storageService } from '@/services/storage'
-import { sampleTrip } from '@/data/sampleTrip'
+import { createEmptyTrip } from '@/data/emptyTrip'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface TripContextValue {
@@ -17,7 +17,7 @@ const TripContext = createContext<TripContextValue | null>(null)
 
 export function TripProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
-  const [trip, setTrip] = useState<TripData>({ ...sampleTrip })
+  const [trip, setTrip] = useState<TripData>(createEmptyTrip)
   const [loading, setLoading] = useState(true)
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -49,7 +49,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   const resetTrip = useCallback(async () => {
     if (!user) return
     await storageService.resetTrip(user.id)
-    setTrip({ ...sampleTrip })
+    setTrip(createEmptyTrip())
   }, [user])
 
   const exportTrip = useCallback(() => storageService.exportTrip(trip), [trip])

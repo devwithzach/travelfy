@@ -4,7 +4,7 @@ import type {
   ChecklistItem, Expense, Document, EmergencyContact, QuickLink,
   Note, VisaInfo, CurrencyRate
 } from '@/types'
-import { sampleTrip } from '@/data/sampleTrip'
+import { createEmptyTrip } from '@/data/emptyTrip'
 
 // ── Mappers: DB row → TypeScript ──────────────────────────
 
@@ -190,7 +190,7 @@ export const storageService = {
       .limit(1)
       .maybeSingle()
 
-    if (!tripRow) return { ...sampleTrip }
+    if (!tripRow) return createEmptyTrip()
     const tripId = tripRow.id as string
 
     // Parallel fetch all related data
@@ -260,7 +260,7 @@ export const storageService = {
         issueDate: passport.issue_date as string || '',
         expiryDate: passport.expiry_date as string || '',
         issuingCountry: passport.issuing_country as string || '',
-      } : { ...sampleTrip.passport },
+      } : createEmptyTrip().passport,
       visas: (visas || []).map(r => mapVisa(r as Record<string, unknown>)),
       currencyRates: (rates || []).map(r => mapRate(r as Record<string, unknown>)),
       lastUpdated: new Date().toISOString(),
@@ -421,12 +421,9 @@ export const storageService = {
   },
 
   async resetTrip(userId: string): Promise<void> {
-    // Delete the trip (cascade deletes everything else)
     await supabase.from('trips').delete().eq('user_id', userId)
     await supabase.from('passport_info').delete().eq('user_id', userId)
     await supabase.from('currency_rates').delete().eq('user_id', userId)
-    // Re-seed with sample data
-    await storageService.saveTrip(userId, { ...sampleTrip })
   },
 
   exportTrip(trip: TripData): string {
