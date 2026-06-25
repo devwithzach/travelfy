@@ -181,6 +181,19 @@ out center 25;`
   return results
 }
 
+function buildPopup(parts: Array<{ text: string; style?: string; tag?: 'b' | 'span' | 'div' }>): HTMLElement {
+  const root = document.createElement('div')
+  root.style.minWidth = '160px'
+  parts.forEach((p, i) => {
+    const el = document.createElement(p.tag ?? 'span')
+    el.textContent = p.text
+    if (p.style) el.setAttribute('style', p.style)
+    root.appendChild(el)
+    if (i < parts.length - 1) root.appendChild(document.createElement('br'))
+  })
+  return root
+}
+
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000
   const dLat = ((lat2 - lat1) * Math.PI) / 180
@@ -336,7 +349,10 @@ export default function MapExplorer() {
       if (!trip.hotels.some(h => h.name === loc.name)) return
       const m = L.marker([loc.lat, loc.lon], { icon: createHotelMarker() })
         .addTo(mapRef.current!)
-        .bindPopup(`<b>${loc.name}</b><br/>${loc.country}`)
+        .bindPopup(buildPopup([
+          { tag: 'b', text: loc.name },
+          { tag: 'span', text: loc.country },
+        ]))
       hotelMarkersRef.current.push(m)
     })
   }, [trip.hotels])
@@ -380,7 +396,17 @@ export default function MapExplorer() {
           return dist < 25 ? prev + 1 : prev
         })
       },
-      undefined,
+      (err) => {
+        const msg =
+          err.code === err.PERMISSION_DENIED
+            ? 'Location permission denied — turn-by-turn nav cannot track you.'
+            : err.code === err.POSITION_UNAVAILABLE
+              ? 'Location unavailable. Check GPS or try outdoors.'
+              : err.code === err.TIMEOUT
+                ? 'Location timed out. Retrying…'
+                : 'Could not get your location.'
+        setError(msg)
+      },
       { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
     )
     return () => {
@@ -468,7 +494,10 @@ export default function MapExplorer() {
         const icon = createColorMarker('#f59e0b')
         const marker = L.marker([poi.lat, poi.lon], { icon })
           .addTo(mapRef.current!)
-          .bindPopup(`<b>${poi.name}</b><br/><span style="color:#f59e0b">⭐ Saved</span>`)
+          .bindPopup(buildPopup([
+            { tag: 'b', text: poi.name },
+            { tag: 'span', text: '⭐ Saved', style: 'color:#f59e0b' },
+          ]))
         marker.on('click', () => setSelectedPoi(poi))
         markersRef.current.push(marker)
       })
@@ -504,13 +533,11 @@ export default function MapExplorer() {
       results.forEach(poi => {
         const marker = L.marker([poi.lat, poi.lon], { icon })
           .addTo(mapRef.current!)
-          .bindPopup(`
-            <div style="min-width:160px">
-              <b style="font-size:13px">${poi.name}</b><br/>
-              <span style="color:#666;font-size:11px;text-transform:capitalize">${poi.type.replace(/_/g, ' ')}</span><br/>
-              <span style="color:#888;font-size:11px">${poi.distance}m away</span>
-            </div>
-          `)
+          .bindPopup(buildPopup([
+            { tag: 'b', text: poi.name, style: 'font-size:13px' },
+            { tag: 'span', text: poi.type.replace(/_/g, ' '), style: 'color:#666;font-size:11px;text-transform:capitalize' },
+            { tag: 'span', text: `${poi.distance}m away`, style: 'color:#888;font-size:11px' },
+          ]))
         marker.on('click', () => setSelectedPoi(poi))
         markersRef.current.push(marker)
       })

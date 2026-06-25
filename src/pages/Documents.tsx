@@ -14,6 +14,9 @@ import { Label } from '@/components/ui/label'
 import { formatDate } from '@/utils/dateUtils'
 import { cn } from '@/utils/cn'
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'application/pdf']
+
 const docTypeConfig = {
   passport: { label: 'Passport', color: 'bg-blue-500' },
   boarding_pass: { label: 'Boarding Pass', color: 'bg-violet-500' },
@@ -27,14 +30,32 @@ export default function Documents() {
   const { trip, updateTrip } = useTrip()
   const [previewDoc, setPreviewDoc] = useState<Document | null>(null)
   const [uploadType, setUploadType] = useState<Document['type']>('other')
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
+
+    setUploadError(null)
+
+    if (file.size > MAX_FILE_SIZE) {
+      setUploadError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max is 10MB.`)
+      return
+    }
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setUploadError('Only JPEG, PNG, GIF, WebP, HEIC, and PDF files are allowed.')
+      return
+    }
 
     const reader = new FileReader()
     reader.onload = ev => {
+      const result = ev.target?.result
+      if (typeof result !== 'string') {
+        setUploadError('Failed to read file.')
+        return
+      }
       const doc: Document = {
         id: crypto.randomUUID(),
         name: file.name.replace(/\.[^/.]+$/, ''),
@@ -43,12 +64,12 @@ export default function Documents() {
         fileType: file.type,
         fileSize: file.size,
         uploadedAt: new Date().toISOString(),
-        dataUrl: ev.target?.result as string,
+        dataUrl: result,
       }
       updateTrip(prev => ({ ...prev, documents: [...prev.documents, doc] }))
     }
+    reader.onerror = () => setUploadError('Failed to read file.')
     reader.readAsDataURL(file)
-    e.target.value = ''
   }
 
   const remove = (id: string) => {
@@ -95,7 +116,10 @@ export default function Documents() {
               </Button>
             </div>
             <input ref={fileRef} type="file" className="hidden" accept="image/*,.pdf" onChange={handleUpload} />
-            <p className="text-xs text-muted-foreground mt-2">Supports images and PDF files</p>
+            <p className="text-xs text-muted-foreground mt-2">Supports images and PDF files (max 10MB)</p>
+            {uploadError && (
+              <p className="text-xs text-destructive mt-2" role="alert">{uploadError}</p>
+            )}
           </CardContent>
         </Card>
 

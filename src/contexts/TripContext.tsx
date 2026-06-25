@@ -10,6 +10,8 @@ interface TripContextValue {
   activeTripId: string | null
   loading: boolean
   tripLoading: boolean
+  error: string | null
+  clearError: () => void
   selectTrip: (id: string) => void
   createNewTrip: (info: { name: string; destination: string; startDate: string; endDate: string; description: string }) => Promise<string>
   deleteTripById: (id: string) => Promise<void>
@@ -30,15 +32,22 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   const [trip, setTrip] = useState<TripData>(createEmptyTrip)
   const [loading, setLoading] = useState(true)
   const [tripLoading, setTripLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearError = useCallback(() => setError(null), [])
 
   // Load trips list on auth
   useEffect(() => {
     if (!user) { setLoading(false); return }
     setLoading(true)
+    setError(null)
     storageService.listTrips(user.id)
       .then(list => { setTrips(list) })
-      .catch(() => {})
+      .catch(err => {
+        console.error('Failed to load trips:', err)
+        setError(`Failed to load trips: ${err?.message ?? 'unknown error'}`)
+      })
       .finally(() => setLoading(false))
   }, [user])
 
@@ -46,9 +55,13 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user || !activeTripId) { setTrip(createEmptyTrip()); return }
     setTripLoading(true)
+    setError(null)
     storageService.getTripById(user.id, activeTripId)
       .then(data => { setTrip(data) })
-      .catch(() => {})
+      .catch(err => {
+        console.error('Failed to load trip:', err)
+        setError(`Failed to load trip: ${err?.message ?? 'unknown error'}`)
+      })
       .finally(() => setTripLoading(false))
   }, [user, activeTripId])
 
@@ -88,7 +101,10 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     if (!user) return
     if (saveTimeout.current) clearTimeout(saveTimeout.current)
     saveTimeout.current = setTimeout(() => {
-      storageService.saveTrip(user.id, data)
+      storageService.saveTrip(user.id, data).catch(err => {
+        console.error('Failed to save trip:', err)
+        setError(`Failed to save trip: ${err?.message ?? 'unknown error'}`)
+      })
     }, 800)
   }, [user])
 
@@ -123,7 +139,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <TripContext.Provider value={{
-      trip, trips, activeTripId, loading, tripLoading,
+      trip, trips, activeTripId, loading, tripLoading, error, clearError,
       selectTrip, createNewTrip, deleteTripById,
       updateTrip, resetTrip, exportTrip, importTrip,
     }}>
