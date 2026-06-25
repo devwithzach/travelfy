@@ -36,20 +36,20 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) { setLoading(false); return }
     setLoading(true)
-    storageService.listTrips(user.id).then(list => {
-      setTrips(list)
-      setLoading(false)
-    })
+    storageService.listTrips(user.id)
+      .then(list => { setTrips(list) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [user])
 
   // Load full trip when activeTripId changes
   useEffect(() => {
     if (!user || !activeTripId) { setTrip(createEmptyTrip()); return }
     setTripLoading(true)
-    storageService.getTripById(user.id, activeTripId).then(data => {
-      setTrip(data)
-      setTripLoading(false)
-    })
+    storageService.getTripById(user.id, activeTripId)
+      .then(data => { setTrip(data) })
+      .catch(() => {})
+      .finally(() => setTripLoading(false))
   }, [user, activeTripId])
 
   const selectTrip = useCallback((id: string) => {

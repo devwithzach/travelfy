@@ -10,12 +10,13 @@ import { cn } from '@/utils/cn'
 
 const mainNav = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Home' },
+  { to: '/', icon: Layers, label: 'My Trips' },
   { to: '/timeline', icon: Map, label: 'Timeline' },
   { to: '/map', icon: MapPin, label: 'Explore' },
-  { to: '/checklist', icon: ListChecks, label: 'Checklist' },
 ]
 
 const moreItems = [
+  { to: '/checklist', icon: ListChecks, label: 'Checklist', color: '#f59e0b' },
   { to: '/flights', icon: Plane, label: 'Flights', color: '#3b82f6' },
   { to: '/hotels', icon: Building2, label: 'Hotels', color: '#8b5cf6' },
   { to: '/expenses', icon: DollarSign, label: 'Expenses', color: '#f43f5e' },
@@ -26,7 +27,6 @@ const moreItems = [
   { to: '/links', icon: Link2, label: 'Links', color: '#6366f1' },
   { to: '/passport', icon: Globe, label: 'Passport', color: '#10b981' },
   { to: '/currency', icon: TrendingUp, label: 'Currency', color: '#14b8a6' },
-  { to: '/', icon: Layers, label: 'My Trips', color: '#64748b' },
   { to: '/settings', icon: Settings, label: 'Settings', color: '#94a3b8' },
 ]
 
@@ -48,7 +48,7 @@ export default function BottomNav() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+            className="fixed inset-0 z-[2000] bg-black/40 backdrop-blur-sm"
             onClick={() => setMoreOpen(false)}
           />
         )}
@@ -62,7 +62,7 @@ export default function BottomNav() {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-            className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border rounded-t-3xl pb-safe"
+            className="fixed bottom-0 left-0 right-0 z-[2001] bg-background border-t border-border rounded-t-3xl pb-safe"
           >
             {/* Handle */}
             <div className="flex justify-center pt-3 pb-1">
@@ -103,7 +103,7 @@ export default function BottomNav() {
       </AnimatePresence>
 
       {/* Bottom Nav Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-lg border-t border-border safe-bottom">
+      <nav className="fixed bottom-0 left-0 right-0 z-[1500] bg-background/95 backdrop-blur-lg border-t border-border safe-bottom">
         <div className="flex px-2 py-1">
           {mainNav.map(({ to, icon: Icon, label }) => (
             <NavLink

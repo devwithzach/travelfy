@@ -1,5 +1,6 @@
 import { Outlet, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { Plane } from 'lucide-react'
 import BottomNav from './BottomNav'
 import { useTrip } from '@/contexts/TripContext'
 
@@ -13,7 +14,20 @@ export default function MainLayout() {
   const location = useLocation()
   const { activeTripId, loading } = useTrip()
 
-  if (loading) return null
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+          className="w-10 h-10 rounded-2xl gradient-brand flex items-center justify-center"
+        >
+          <Plane className="h-5 w-5 text-white" />
+        </motion.div>
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      </div>
+    )
+  }
 
   if (!activeTripId) return <Navigate to="/" replace />
 
