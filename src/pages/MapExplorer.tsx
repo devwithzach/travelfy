@@ -128,9 +128,14 @@ const CATEGORIES = [
 
 const RADIUS_OPTIONS = [500, 1000, 1500, 2000]
 
+// ── POI cache (session-level, avoids re-fetching same location+category) ──
+const poiCache = new Map<string, POI[]>()
+
 // ── Overpass API ─────────────────────────────────────────────
 
 async function fetchPOIs(lat: number, lon: number, categoryId: string, radius: number): Promise<POI[]> {
+  const cacheKey = `${categoryId}:${lat.toFixed(3)}:${lon.toFixed(3)}:${radius}`
+  if (poiCache.has(cacheKey)) return poiCache.get(cacheKey)!
   const cat = CATEGORIES.find(c => c.id === categoryId)
   if (!cat) return []
 
@@ -153,7 +158,7 @@ out center 25;`
   if (!res.ok) throw new Error('Overpass API error')
   const data = await res.json()
 
-  return (data.elements as any[])
+  const results = (data.elements as any[])
     .filter((el: any) => el.tags?.name)
     .map((el: any) => {
       const elLat = el.lat ?? el.center?.lat
@@ -171,6 +176,9 @@ out center 25;`
     })
     .filter((p: POI) => p.lat && p.lon)
     .sort((a: POI, b: POI) => (a.distance ?? 0) - (b.distance ?? 0))
+
+  poiCache.set(cacheKey, results)
+  return results
 }
 
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -781,95 +789,88 @@ export default function MapExplorer() {
         )}
       </AnimatePresence>
 
-      {/* Category Filter Bar */}
-      <div className="absolute bottom-0 left-0 right-0 z-[1000] bg-gradient-to-t from-background/80 via-background/40 to-transparent pointer-events-none">
-        <div className="pointer-events-auto">
-
-        {/* POI Results Sheet */}
-        {!navMode && (
-          <AnimatePresence>
-            {showResults && pois.length > 0 && (
-              <motion.div
-                initial={{ y: 300 }}
-                animate={{ y: 0 }}
-                exit={{ y: 300 }}
-                transition={{ type: 'spring', damping: 25 }}
-                className="bg-background/95 backdrop-blur-md border-t border-border max-h-64 overflow-y-auto"
-              >
-                <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
-                  <p className="text-sm font-semibold">{pois.length} places found</p>
-                  <button onClick={() => setShowResults(false)}>
-                    <X className="h-4 w-4 text-muted-foreground" />
-                  </button>
-                </div>
-                {pois.map(poi => {
-                  const cat = CATEGORIES.find(c => c.id === activeCategory)!
-                  return (
-                    <button
-                      key={poi.id}
-                      onClick={() => flyToPoi(poi)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors border-b border-border/30 text-left ${selectedPoi?.id === poi.id ? 'bg-primary/5' : ''}`}
-                    >
-                      <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: cat.markerColor + '20' }}>
-                        <cat.icon className="h-4 w-4" style={{ color: cat.markerColor }} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{poi.name}</p>
-                        <p className="text-xs text-muted-foreground capitalize">{poi.type.replace(/_/g, ' ')} · {poi.distance}m away</p>
-                      </div>
-                      <Navigation className="h-4 w-4 text-muted-foreground shrink-0" />
-                    </button>
-                  )
-                })}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        )}
-
-        {/* Error */}
-        {!navMode && error && (
-          <div className="mx-3 mb-2 px-4 py-2 bg-destructive/10 text-destructive text-sm rounded-xl text-center">
-            {error}
+      {/* Category Filter Bar — fixed at bottom */}
+      {!navMode && (
+        <div className="absolute bottom-0 left-0 right-0 z-[1000] bg-background/95 backdrop-blur-md border-t border-border px-3 pt-2.5 pb-2.5">
+          <div className="flex gap-3 overflow-x-auto scrollbar-hide">
+            {CATEGORIES.map(cat => {
+              const isActive = activeCategory === cat.id
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => searchCategory(cat.id)}
+                  disabled={loading}
+                  className="flex flex-col items-center gap-1 shrink-0 active:scale-90 transition-transform"
+                >
+                  <div
+                    className="w-11 h-11 rounded-2xl flex items-center justify-center"
+                    style={{
+                      background: isActive ? cat.color : cat.color + '22',
+                      boxShadow: isActive ? `0 3px 10px ${cat.color}55` : 'none',
+                    }}
+                  >
+                    {loading && isActive
+                      ? <Loader2 className="h-4.5 w-4.5 animate-spin text-white" />
+                      : <cat.icon className="h-[18px] w-[18px]" style={{ color: isActive ? 'white' : cat.color }} />
+                    }
+                  </div>
+                  <span className="text-[10px] font-medium leading-none" style={{ color: isActive ? cat.color : 'hsl(var(--muted-foreground))' }}>
+                    {cat.label.split(' ')[0]}
+                  </span>
+                </button>
+              )
+            })}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Category Buttons */}
-        {!navMode && (
-          <div className="px-3 pt-2 pb-3">
-            <div className="flex gap-3 overflow-x-auto scrollbar-hide justify-center">
-              {CATEGORIES.map(cat => {
-                const isActive = activeCategory === cat.id
+      {/* POI Results Sheet — slides up above filter bar */}
+      {!navMode && (
+        <AnimatePresence>
+          {showResults && pois.length > 0 && (
+            <motion.div
+              initial={{ y: 300 }}
+              animate={{ y: 0 }}
+              exit={{ y: 300 }}
+              transition={{ type: 'spring', damping: 25 }}
+              className="absolute bottom-[72px] left-0 right-0 z-[999] bg-background/95 backdrop-blur-md border-t border-border max-h-56 overflow-y-auto"
+            >
+              <div className="flex items-center justify-between px-4 py-2 border-b border-border/50 sticky top-0 bg-background/95">
+                <p className="text-sm font-semibold">{pois.length} places found</p>
+                <button onClick={() => setShowResults(false)}>
+                  <X className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </div>
+              {pois.map(poi => {
+                const cat = CATEGORIES.find(c => c.id === activeCategory)!
                 return (
                   <button
-                    key={cat.id}
-                    onClick={() => searchCategory(cat.id)}
-                    disabled={loading}
-                    className="flex flex-col items-center gap-1 shrink-0 transition-all active:scale-90"
+                    key={poi.id}
+                    onClick={() => flyToPoi(poi)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors border-b border-border/30 text-left ${selectedPoi?.id === poi.id ? 'bg-primary/5' : ''}`}
                   >
-                    <div
-                      className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-all"
-                      style={{
-                        background: isActive ? cat.color : 'var(--background)',
-                        border: `2px solid ${isActive ? cat.color : 'transparent'}`,
-                        boxShadow: isActive ? `0 4px 14px ${cat.color}55` : '0 2px 8px rgba(0,0,0,0.15)',
-                      }}
-                    >
-                      {loading && isActive
-                        ? <Loader2 className="h-5 w-5 animate-spin text-white" />
-                        : <cat.icon className="h-5 w-5" style={{ color: isActive ? 'white' : cat.color }} />
-                      }
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: cat.markerColor + '20' }}>
+                      <cat.icon className="h-4 w-4" style={{ color: cat.markerColor }} />
                     </div>
-                    <span className="text-[10px] font-semibold leading-none" style={{ color: isActive ? cat.color : 'var(--muted-foreground)' }}>
-                      {cat.label.split(' ')[0]}
-                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{poi.name}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{poi.type.replace(/_/g, ' ')} · {poi.distance}m away</p>
+                    </div>
+                    <Navigation className="h-4 w-4 text-muted-foreground shrink-0" />
                   </button>
                 )
               })}
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
+
+      {/* Error */}
+      {!navMode && error && (
+        <div className="absolute bottom-[80px] left-3 right-3 z-[999] px-4 py-2 bg-destructive/10 text-destructive text-sm rounded-xl text-center">
+          {error}
         </div>
-      </div>
+      )}
 
       {/* Selected POI Detail Card */}
       <AnimatePresence>
