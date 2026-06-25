@@ -782,7 +782,8 @@ export default function MapExplorer() {
       </AnimatePresence>
 
       {/* Category Filter Bar */}
-      <div className="absolute bottom-0 left-0 right-0 z-[1000]">
+      <div className="absolute bottom-0 left-0 right-0 z-[1000] bg-gradient-to-t from-background/80 via-background/40 to-transparent pointer-events-none">
+        <div className="pointer-events-auto">
 
         {/* POI Results Sheet */}
         {!navMode && (
@@ -834,8 +835,8 @@ export default function MapExplorer() {
 
         {/* Category Buttons */}
         {!navMode && (
-          <div className="bg-background/95 backdrop-blur-md border-t border-border px-3 py-3">
-            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+          <div className="px-3 pt-2 pb-3">
+            <div className="flex gap-3 overflow-x-auto scrollbar-hide justify-center">
               {CATEGORIES.map(cat => {
                 const isActive = activeCategory === cat.id
                 return (
@@ -843,24 +844,31 @@ export default function MapExplorer() {
                     key={cat.id}
                     onClick={() => searchCategory(cat.id)}
                     disabled={loading}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 border"
-                    style={{
-                      background: isActive ? cat.color : 'transparent',
-                      borderColor: isActive ? cat.color : 'var(--border)',
-                      color: isActive ? 'white' : cat.color,
-                    }}
+                    className="flex flex-col items-center gap-1 shrink-0 transition-all active:scale-90"
                   >
-                    {loading && isActive
-                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      : <cat.icon className="h-3.5 w-3.5" />
-                    }
-                    {cat.label}
+                    <div
+                      className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-all"
+                      style={{
+                        background: isActive ? cat.color : 'var(--background)',
+                        border: `2px solid ${isActive ? cat.color : 'transparent'}`,
+                        boxShadow: isActive ? `0 4px 14px ${cat.color}55` : '0 2px 8px rgba(0,0,0,0.15)',
+                      }}
+                    >
+                      {loading && isActive
+                        ? <Loader2 className="h-5 w-5 animate-spin text-white" />
+                        : <cat.icon className="h-5 w-5" style={{ color: isActive ? 'white' : cat.color }} />
+                      }
+                    </div>
+                    <span className="text-[10px] font-semibold leading-none" style={{ color: isActive ? cat.color : 'var(--muted-foreground)' }}>
+                      {cat.label.split(' ')[0]}
+                    </span>
                   </button>
                 )
               })}
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Selected POI Detail Card */}
