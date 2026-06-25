@@ -7,7 +7,8 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import { useTrip } from '@/contexts/TripContext'
 import {
   MapPin, UtensilsCrossed, ShoppingBag, Camera, Gift,
-  Bus, Pill, ChevronDown, Loader2, Navigation, X, Clock, Footprints
+  Bus, Pill, ChevronDown, Loader2, Navigation, X, Clock, Footprints,
+  ArrowUp, ArrowLeft, ArrowRight, ArrowUpLeft, ArrowUpRight, RotateCcw
 } from 'lucide-react'
 
 // Fix Leaflet default icon issue with Vite
@@ -35,6 +36,15 @@ interface Location {
   lat: number
   lon: number
   country: string
+}
+
+interface NavStep {
+  instruction: string
+  distance: number
+  lat: number
+  lon: number
+  maneuverType: string
+  maneuverModifier: string
 }
 
 // ── Categories ───────────────────────────────────────────────
@@ -171,6 +181,35 @@ function createHotelMarker() {
   })
 }
 
+// ── Nav helpers ──────────────────────────────────────────────
+
+function formatInstruction(step: any): string {
+  const type: string = step.maneuver.type
+  const mod: string = step.maneuver.modifier || 'straight'
+  const name: string = step.name ? ` onto ${step.name}` : ''
+  if (type === 'depart') return `Head ${mod}${name}`
+  if (type === 'arrive') return 'You have arrived'
+  if (type === 'turn') return `Turn ${mod}${name}`
+  if (type === 'new name') return `Continue${name}`
+  if (type === 'continue') return `Continue ${mod}${name}`
+  if (type === 'merge') return `Merge ${mod}${name}`
+  if (type === 'roundabout') return `Take roundabout${name}`
+  return `${type}${name}`
+}
+
+function TurnArrow({ modifier }: { modifier: string }) {
+  const iconMap: Record<string, React.ComponentType<any>> = {
+    left: ArrowLeft,
+    right: ArrowRight,
+    'slight left': ArrowUpLeft,
+    'slight right': ArrowUpRight,
+    straight: ArrowUp,
+    uturn: RotateCcw,
+  }
+  const Icon = iconMap[modifier] || ArrowUp
+  return <Icon className="h-7 w-7 text-white" strokeWidth={2.5} />
+}
+
 // ── Main Component ───────────────────────────────────────────
 
 export default function MapExplorer() {
@@ -179,6 +218,8 @@ export default function MapExplorer() {
   const mapElRef = useRef<HTMLDivElement>(null)
   const markersRef = useRef<L.Layer[]>([])
   const hotelMarkersRef = useRef<L.Layer[]>([])
+  const watchIdRef = useRef<number | null>(null)
+  const userMarkerRef = useRef<L.CircleMarker | null>(null)
 
   // Build location list from trip data
   const locations: Location[] = [
@@ -208,6 +249,12 @@ export default function MapExplorer() {
   const [routeInfo, setRouteInfo] = useState<{ distance: number; duration: number } | null>(null)
   const [routeLayer, setRouteLayer] = useState<L.Polyline | null>(null)
   const [navigating, setNavigating] = useState(false)
+
+  // Nav state
+  const [navMode, setNavMode] = useState(false)
+  const [navSteps, setNavSteps] = useState<NavStep[]>([])
+  const [currentStepIdx, setCurrentStepIdx] = useState(0)
+  const [userPos, setUserPos] = useState<[number, number] | null>(null)
 
   // Init map
   useEffect(() => {
@@ -257,6 +304,39 @@ export default function MapExplorer() {
     setActiveCategory(null)
     setShowResults(false)
   }, [selectedLocation])
+
+  // Geolocation tracking during nav
+  useEffect(() => {
+    if (!navMode || !navigator.geolocation) return
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lat = pos.coords.latitude
+        const lon = pos.coords.longitude
+        setUserPos([lat, lon])
+        if (mapRef.current) {
+          if (userMarkerRef.current) {
+            userMarkerRef.current.setLatLng([lat, lon])
+          } else {
+            userMarkerRef.current = L.circleMarker([lat, lon], {
+              radius: 10, fillColor: '#2563EB', color: 'white', weight: 3, fillOpacity: 1,
+            }).addTo(mapRef.current)
+          }
+        }
+        // Auto-advance step when within 25m of next step location
+        setCurrentStepIdx(prev => {
+          if (navSteps.length === 0 || prev >= navSteps.length - 1) return prev
+          const next = navSteps[prev + 1]
+          const dist = haversine(lat, lon, next.lat, next.lon)
+          return dist < 25 ? prev + 1 : prev
+        })
+      },
+      undefined,
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
+    )
+    return () => {
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current)
+    }
+  }, [navMode, navSteps])
 
   // Clear POI markers
   const clearMarkers = useCallback(() => {
@@ -327,22 +407,48 @@ export default function MapExplorer() {
     setRouteInfo(null)
     try {
       const { lat: fLat, lon: fLon } = selectedLocation
-      const url = `https://router.project-osrm.org/route/v1/foot/${fLon},${fLat};${poi.lon},${poi.lat}?overview=full&geometries=geojson`
+      const url = `https://router.project-osrm.org/route/v1/foot/${fLon},${fLat};${poi.lon},${poi.lat}?overview=full&geometries=geojson&steps=true`
       const res = await fetch(url)
       const data = await res.json()
       if (data.code !== 'Ok') throw new Error('No route')
       const route = data.routes[0]
+
+      // Draw polyline
       const coords: [number, number][] = route.geometry.coordinates.map(([lon, lat]: [number, number]) => [lat, lon])
       const poly = L.polyline(coords, { color: '#2563EB', weight: 5, opacity: 0.85, lineCap: 'round', lineJoin: 'round' }).addTo(mapRef.current)
       setRouteLayer(poly)
       setRouteInfo({ distance: Math.round(route.distance), duration: Math.round(route.duration / 60) })
       mapRef.current.fitBounds(poly.getBounds().pad(0.15))
+
+      // Parse steps
+      const steps: NavStep[] = (route.legs[0]?.steps || []).map((step: any) => ({
+        instruction: formatInstruction(step),
+        distance: Math.round(step.distance),
+        lat: step.maneuver.location[1],
+        lon: step.maneuver.location[0],
+        maneuverType: step.maneuver.type,
+        maneuverModifier: step.maneuver.modifier || 'straight',
+      }))
+      setNavSteps(steps)
+      setCurrentStepIdx(0)
+      setNavMode(true)
     } catch {
       alert('Could not find a walking route.')
     } finally {
       setNavigating(false)
     }
   }
+
+  const endNavigation = useCallback(() => {
+    setNavMode(false)
+    setNavSteps([])
+    setCurrentStepIdx(0)
+    if (routeLayer && mapRef.current) { mapRef.current.removeLayer(routeLayer); setRouteLayer(null) }
+    setRouteInfo(null)
+    if (watchIdRef.current !== null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null }
+    if (userMarkerRef.current && mapRef.current) { mapRef.current.removeLayer(userMarkerRef.current); userMarkerRef.current = null }
+    setUserPos(null)
+  }, [routeLayer])
 
   const clearRoute = () => {
     if (routeLayer && mapRef.current) { mapRef.current.removeLayer(routeLayer); setRouteLayer(null) }
@@ -352,8 +458,63 @@ export default function MapExplorer() {
   return (
     <div className="relative flex flex-col h-[calc(100vh-6rem)] bg-background overflow-hidden">
 
+      {/* Turn-by-turn Nav Banner */}
+      <AnimatePresence>
+        {navMode && navSteps.length > 0 && (
+          <motion.div
+            initial={{ y: -80 }}
+            animate={{ y: 0 }}
+            exit={{ y: -80 }}
+            transition={{ type: 'spring', damping: 25 }}
+            className="absolute top-0 left-0 right-0 z-[1003] bg-primary shadow-2xl"
+          >
+            <div className="flex items-center gap-3 px-4 pt-3 pb-2">
+              <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+                <TurnArrow modifier={navSteps[currentStepIdx]?.maneuverModifier || 'straight'} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-bold text-base leading-tight">
+                  {navSteps[currentStepIdx]?.instruction}
+                </p>
+                {navSteps[currentStepIdx]?.distance > 0 && (
+                  <p className="text-white/70 text-xs mt-0.5">
+                    {navSteps[currentStepIdx].distance}m
+                    {currentStepIdx < navSteps.length - 1 && ` · then: ${navSteps[currentStepIdx + 1]?.instruction}`}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={endNavigation}
+                className="shrink-0 bg-white/20 text-white text-xs font-bold px-3 py-2 rounded-xl"
+              >
+                End
+              </button>
+            </div>
+            {/* Progress bar */}
+            <div className="flex items-center gap-2 px-4 pb-3">
+              <div className="flex-1 h-1.5 bg-white/20 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-white rounded-full transition-all duration-500"
+                  style={{ width: `${((currentStepIdx + 1) / Math.max(navSteps.length, 1)) * 100}%` }}
+                />
+              </div>
+              <span className="text-white/60 text-[10px] font-medium">{currentStepIdx + 1}/{navSteps.length}</span>
+            </div>
+            {/* Manual next step button (for when no GPS) */}
+            {!userPos && currentStepIdx < navSteps.length - 1 && (
+              <button
+                onClick={() => setCurrentStepIdx(i => Math.min(i + 1, navSteps.length - 1))}
+                className="w-full text-center text-white/60 text-xs pb-2 hover:text-white/90"
+              >
+                Tap to advance step manually
+              </button>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Top Bar */}
-      <div className="absolute top-0 left-0 right-0 z-[1000] p-3 flex gap-2">
+      <div className="absolute top-0 left-0 right-0 z-[1000] p-3 flex gap-2" style={{ top: navMode && navSteps.length > 0 ? undefined : 0 }}>
         {/* Location Picker */}
         <button
           onClick={() => setShowLocationPicker(v => !v)}
@@ -529,15 +690,24 @@ export default function MapExplorer() {
               </div>
             )}
             <div className="mt-3 flex gap-2">
-              <button
-                onClick={() => navigateToPoi(selectedPoi)}
-                disabled={navigating}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-primary text-white text-xs font-bold disabled:opacity-60"
-              >
-                {navigating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Navigation className="h-3.5 w-3.5" />}
-                {navigating ? 'Routing…' : 'Navigate'}
-              </button>
-              {routeInfo && (
+              {navMode ? (
+                <button
+                  onClick={endNavigation}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-destructive text-white text-xs font-bold"
+                >
+                  <X className="h-3.5 w-3.5" /> End Nav
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigateToPoi(selectedPoi)}
+                  disabled={navigating}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-primary text-white text-xs font-bold disabled:opacity-60"
+                >
+                  {navigating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Navigation className="h-3.5 w-3.5" />}
+                  {navigating ? 'Routing…' : 'Navigate'}
+                </button>
+              )}
+              {routeInfo && !navMode && (
                 <button onClick={clearRoute} className="px-3 py-2 rounded-xl bg-muted text-xs font-medium">
                   Clear
                 </button>

@@ -41,12 +41,15 @@ export default function Photos() {
   const [pendingPreview, setPendingPreview] = useState<string | null>(null)
   const [caption, setCaption] = useState('')
   const [locationTag, setLocationTag] = useState('')
-  const [activityTag, setActivityTag] = useState('')
 
-  // All activities flattened for tag picker
-  const allActivities = trip.itinerary.flatMap(d =>
-    d.activities.map(a => ({ label: `Day ${d.dayNumber} – ${a.title}`, value: a.title }))
-  )
+  // GPS state
+  const [photoLat, setPhotoLat] = useState<number | null>(null)
+  const [photoLon, setPhotoLon] = useState<number | null>(null)
+  const [gpsLoading, setGpsLoading] = useState(false)
+
+  // Itinerary tag state
+  const [selectedDayId, setSelectedDayId] = useState('')
+  const [selectedActivityId, setSelectedActivityId] = useState('')
 
   // Load photos
   const loadPhotos = useCallback(async () => {
@@ -72,6 +75,36 @@ export default function Photos() {
     setPendingPreview(URL.createObjectURL(file))
     setShowUploadSheet(true)
     e.target.value = ''
+
+    // Auto-GPS
+    setGpsLoading(true)
+    setPhotoLat(null)
+    setPhotoLon(null)
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const lat = pos.coords.latitude
+          const lon = pos.coords.longitude
+          setPhotoLat(lat)
+          setPhotoLon(lon)
+          // Reverse geocode with Nominatim
+          try {
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=16`,
+              { headers: { 'Accept-Language': 'en' } }
+            )
+            const data = await res.json()
+            const place = data.address?.tourism || data.address?.amenity || data.address?.road || data.address?.suburb || data.address?.city || ''
+            if (place) setLocationTag(place)
+          } catch { /* ignore */ }
+          setGpsLoading(false)
+        },
+        () => setGpsLoading(false),
+        { enableHighAccuracy: true, timeout: 8000 }
+      )
+    } else {
+      setGpsLoading(false)
+    }
   }
 
   const cancelUpload = () => {
@@ -80,7 +113,11 @@ export default function Photos() {
     setPendingPreview(null)
     setCaption('')
     setLocationTag('')
-    setActivityTag('')
+    setPhotoLat(null)
+    setPhotoLon(null)
+    setGpsLoading(false)
+    setSelectedDayId('')
+    setSelectedActivityId('')
   }
 
   // Upload to Supabase Storage + insert metadata
@@ -101,6 +138,12 @@ export default function Photos() {
 
       const { data: urlData } = supabase.storage.from('trip-photos').getPublicUrl(path)
 
+      const selectedDay = trip.itinerary.find(d => d.id === selectedDayId)
+      const selectedActivity = selectedDay?.activities.find(a => a.id === selectedActivityId)
+      const activityLabel = selectedDay
+        ? `Day ${selectedDay.dayNumber} – ${selectedDay.title}${selectedActivity ? ` · ${selectedActivity.title}` : ''}`
+        : ''
+
       const { error: dbErr } = await supabase.from('trip_photos').insert({
         id,
         trip_id: trip.tripInfo.id,
@@ -109,7 +152,9 @@ export default function Photos() {
         public_url: urlData.publicUrl,
         caption,
         location_tag: locationTag,
-        activity_tag: activityTag,
+        activity_tag: activityLabel,
+        lat: photoLat,
+        lon: photoLon,
         taken_at: new Date().toISOString(),
       })
 
@@ -221,10 +266,19 @@ export default function Photos() {
                   </div>
                 )}
                 {(photo.location_tag || photo.activity_tag) && (
-                  <div className="absolute top-1 left-1">
-                    <div className="w-4 h-4 rounded-full bg-primary/80 flex items-center justify-center">
-                      <Tag className="h-2.5 w-2.5 text-white" />
-                    </div>
+                  <div className="absolute top-1.5 left-1.5 flex flex-col gap-0.5">
+                    {photo.location_tag && (
+                      <div className="flex items-center gap-0.5 bg-black/60 backdrop-blur-sm rounded-full px-1.5 py-0.5">
+                        <MapPin className="h-2.5 w-2.5 text-white/80" />
+                        <span className="text-[9px] text-white/80 truncate max-w-[60px]">{photo.location_tag}</span>
+                      </div>
+                    )}
+                    {photo.activity_tag && (
+                      <div className="flex items-center gap-0.5 bg-primary/70 backdrop-blur-sm rounded-full px-1.5 py-0.5">
+                        <Tag className="h-2.5 w-2.5 text-white/80" />
+                        <span className="text-[9px] text-white/80 truncate max-w-[60px]">{photo.activity_tag.split('·')[0].trim()}</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </motion.button>
@@ -289,30 +343,50 @@ export default function Photos() {
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                     <MapPin className="h-3 w-3" /> Location
+                    {gpsLoading && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
+                    {photoLat && !gpsLoading && <span className="text-primary font-normal normal-case tracking-normal ml-1">GPS detected</span>}
                   </label>
                   <input
                     value={locationTag}
                     onChange={e => setLocationTag(e.target.value)}
-                    placeholder="e.g. Disneyland, Venetian Macau..."
-                    className="mt-1.5 w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    placeholder={gpsLoading ? 'Detecting location...' : 'e.g. Disneyland, Venetian Macau...'}
+                    disabled={gpsLoading}
+                    className="mt-1.5 w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
                   />
+                  {photoLat && photoLon && (
+                    <p className="text-xs text-muted-foreground mt-1 font-mono">{photoLat.toFixed(5)}, {photoLon.toFixed(5)}</p>
+                  )}
                 </div>
 
-                {/* Activity Tag */}
+                {/* Itinerary Tag */}
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                    <Tag className="h-3 w-3" /> Tag Activity
+                    <Tag className="h-3 w-3" /> Link to Itinerary
                   </label>
-                  <select
-                    value={activityTag}
-                    onChange={e => setActivityTag(e.target.value)}
-                    className="mt-1.5 w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
-                  >
-                    <option value="">— No tag —</option>
-                    {allActivities.map(a => (
-                      <option key={a.value} value={a.value}>{a.label}</option>
-                    ))}
-                  </select>
+                  <div className="mt-1.5 flex flex-col gap-2">
+                    <select
+                      value={selectedDayId}
+                      onChange={e => { setSelectedDayId(e.target.value); setSelectedActivityId('') }}
+                      className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                    >
+                      <option value="">— Select Day —</option>
+                      {trip.itinerary.map(d => (
+                        <option key={d.id} value={d.id}>Day {d.dayNumber} – {d.title}</option>
+                      ))}
+                    </select>
+                    {selectedDayId && (
+                      <select
+                        value={selectedActivityId}
+                        onChange={e => setSelectedActivityId(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                      >
+                        <option value="">— Select Activity (optional) —</option>
+                        {(trip.itinerary.find(d => d.id === selectedDayId)?.activities || []).map(a => (
+                          <option key={a.id} value={a.id}>{a.time} – {a.title}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
                 </div>
 
                 {/* Upload Button */}
