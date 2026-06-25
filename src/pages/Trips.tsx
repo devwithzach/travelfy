@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { MapPin, Plus, Trash2, Plane, Loader2, CalendarDays } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTrip } from '@/contexts/TripContext'
-import BottomNav from '@/layouts/BottomNav'
 import { formatDate } from '@/utils/dateUtils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -86,7 +85,7 @@ export default function Trips() {
   const userEmail = user?.email ?? ''
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-background pb-8">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-lg border-b border-border px-4 pt-safe-top">
         <div className="max-w-lg mx-auto py-4 flex items-center justify-between">
@@ -298,7 +297,6 @@ export default function Trips() {
         </DialogContent>
       </Dialog>
 
-      <BottomNav />
     </div>
   )
 }
