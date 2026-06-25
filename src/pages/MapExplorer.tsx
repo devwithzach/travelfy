@@ -128,14 +128,35 @@ const CATEGORIES = [
 
 const RADIUS_OPTIONS = [500, 1000, 1500, 2000]
 
-// ── POI cache (session-level, avoids re-fetching same location+category) ──
+// ── POI cache (session-level LRU, avoids re-fetching same location+category) ──
+const POI_CACHE_MAX = 50
 const poiCache = new Map<string, POI[]>()
+
+function poiCacheGet(key: string): POI[] | undefined {
+  const v = poiCache.get(key)
+  if (v) {
+    poiCache.delete(key)
+    poiCache.set(key, v) // mark as recently used
+  }
+  return v
+}
+
+function poiCacheSet(key: string, value: POI[]) {
+  if (poiCache.has(key)) poiCache.delete(key)
+  poiCache.set(key, value)
+  while (poiCache.size > POI_CACHE_MAX) {
+    const oldest = poiCache.keys().next().value
+    if (oldest === undefined) break
+    poiCache.delete(oldest)
+  }
+}
 
 // ── Overpass API ─────────────────────────────────────────────
 
 async function fetchPOIs(lat: number, lon: number, categoryId: string, radius: number): Promise<POI[]> {
   const cacheKey = `${categoryId}:${lat.toFixed(3)}:${lon.toFixed(3)}:${radius}`
-  if (poiCache.has(cacheKey)) return poiCache.get(cacheKey)!
+  const cached = poiCacheGet(cacheKey)
+  if (cached) return cached
   const cat = CATEGORIES.find(c => c.id === categoryId)
   if (!cat) return []
 
@@ -177,7 +198,7 @@ out center 25;`
     .filter((p: POI) => p.lat && p.lon)
     .sort((a: POI, b: POI) => (a.distance ?? 0) - (b.distance ?? 0))
 
-  poiCache.set(cacheKey, results)
+  poiCacheSet(cacheKey, results)
   return results
 }
 
@@ -192,6 +213,27 @@ function buildPopup(parts: Array<{ text: string; style?: string; tag?: 'b' | 'sp
     if (i < parts.length - 1) root.appendChild(document.createElement('br'))
   })
   return root
+}
+
+// Parse a Google Maps URL for coordinates. Supports @lat,lon ; ?q=lat,lon ; ?ll=lat,lon ; !3dlat!4dlon.
+function parseMapsUrl(url: string | undefined): { lat: number; lon: number } | null {
+  if (!url) return null
+  const patterns = [
+    /[@?&](?:ll|q)=(-?\d+\.\d+),(-?\d+\.\d+)/,
+    /@(-?\d+\.\d+),(-?\d+\.\d+)/,
+    /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,
+  ]
+  for (const re of patterns) {
+    const m = url.match(re)
+    if (m) {
+      const lat = Number(m[1])
+      const lon = Number(m[2])
+      if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
+        return { lat, lon }
+      }
+    }
+  }
+  return null
 }
 
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -270,14 +312,15 @@ export default function MapExplorer() {
   const userMarkerRef = useRef<L.CircleMarker | null>(null)
   const savedMarkersRef = useRef<L.Layer[]>([])
 
-  // Build location list from trip data
+  // Build location list from trip data. Only include hotels with parseable coords.
   const locations: Location[] = [
-    ...trip.hotels.map(h => ({
-      name: h.name,
-      lat: h.name.includes('Dorsett') ? 22.3122 : 22.2015,
-      lon: h.name.includes('Dorsett') ? 114.2265 : 113.5516,
-      country: h.name.includes('Dorsett') ? 'Hong Kong' : 'Macau',
-    })),
+    ...trip.hotels
+      .map(h => {
+        const coords = parseMapsUrl(h.mapsUrl)
+        if (!coords) return null
+        return { name: h.name, lat: coords.lat, lon: coords.lon, country: '' }
+      })
+      .filter((l): l is Location => l !== null),
     { name: 'Wong Tai Sin Shrine', lat: 22.3420, lon: 114.1934, country: 'Hong Kong' },
     { name: 'West Kowloon Cultural District', lat: 22.3033, lon: 114.1603, country: 'Hong Kong' },
     { name: 'HK Disneyland', lat: 22.3130, lon: 114.0448, country: 'Hong Kong' },
