@@ -18,6 +18,7 @@ import Documents from '@/pages/Documents'
 import Passport from '@/pages/Passport'
 import Currency from '@/pages/Currency'
 import Settings from '@/pages/Settings'
+import MapExplorer from '@/pages/MapExplorer'
 import { motion } from 'framer-motion'
 import { Plane } from 'lucide-react'
 
@@ -59,6 +60,7 @@ function AppRoutes() {
           <Route path="/emergency" element={<Emergency />} />
           <Route path="/notes" element={<Notes />} />
           <Route path="/links" element={<QuickLinks />} />
+          <Route path="/map" element={<MapExplorer />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
