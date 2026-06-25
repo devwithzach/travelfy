@@ -283,6 +283,8 @@ export default function MapExplorer() {
   const [navSteps, setNavSteps] = useState<NavStep[]>([])
   const [currentStepIdx, setCurrentStepIdx] = useState(0)
   const [userPos, setUserPos] = useState<[number, number] | null>(null)
+  const [distToNext, setDistToNext] = useState<number | null>(null)
+  const [showNextTurns, setShowNextTurns] = useState(false)
 
   // Save & Rate state
   const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([])
@@ -348,7 +350,10 @@ export default function MapExplorer() {
         const lat = pos.coords.latitude
         const lon = pos.coords.longitude
         setUserPos([lat, lon])
+
+        // Auto-pan map to follow user
         if (mapRef.current) {
+          mapRef.current.setView([lat, lon], 17, { animate: true, duration: 0.5 })
           if (userMarkerRef.current) {
             userMarkerRef.current.setLatLng([lat, lon])
           } else {
@@ -357,11 +362,13 @@ export default function MapExplorer() {
             }).addTo(mapRef.current)
           }
         }
-        // Auto-advance step when within 25m of next step location
+
+        // Calculate live distance to next maneuver point
         setCurrentStepIdx(prev => {
           if (navSteps.length === 0 || prev >= navSteps.length - 1) return prev
           const next = navSteps[prev + 1]
           const dist = haversine(lat, lon, next.lat, next.lon)
+          setDistToNext(dist)
           return dist < 25 ? prev + 1 : prev
         })
       },
@@ -561,6 +568,8 @@ export default function MapExplorer() {
     setNavMode(false)
     setNavSteps([])
     setCurrentStepIdx(0)
+    setDistToNext(null)
+    setShowNextTurns(false)
     if (routeLayer && mapRef.current) { mapRef.current.removeLayer(routeLayer); setRouteLayer(null) }
     setRouteInfo(null)
     if (watchIdRef.current !== null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null }
@@ -576,196 +585,282 @@ export default function MapExplorer() {
   return (
     <div className="relative flex flex-col h-[calc(100vh-6rem)] bg-background overflow-hidden">
 
-      {/* Turn-by-turn Nav Banner */}
+      {/* Waze-style Nav Banner */}
       <AnimatePresence>
         {navMode && navSteps.length > 0 && (
           <motion.div
-            initial={{ y: -80 }}
+            initial={{ y: -120 }}
             animate={{ y: 0 }}
-            exit={{ y: -80 }}
-            transition={{ type: 'spring', damping: 25 }}
-            className="absolute top-0 left-0 right-0 z-[1003] bg-primary shadow-2xl"
+            exit={{ y: -120 }}
+            transition={{ type: 'spring', damping: 28 }}
+            className="absolute top-0 left-0 right-0 z-[1003]"
           >
-            <div className="flex items-center gap-3 px-4 pt-3 pb-2">
-              <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
-                <TurnArrow modifier={navSteps[currentStepIdx]?.maneuverModifier || 'straight'} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-white font-bold text-base leading-tight">
-                  {navSteps[currentStepIdx]?.instruction}
-                </p>
-                {navSteps[currentStepIdx]?.distance > 0 && (
-                  <p className="text-white/70 text-xs mt-0.5">
-                    {navSteps[currentStepIdx].distance}m
-                    {currentStepIdx < navSteps.length - 1 && ` · then: ${navSteps[currentStepIdx + 1]?.instruction}`}
+            {/* Main instruction bar */}
+            <div className="bg-[#1a1a2e] shadow-2xl">
+              <div className="flex items-center gap-0 px-0">
+                {/* Turn arrow box */}
+                <div className="w-20 h-20 bg-primary flex items-center justify-center shrink-0">
+                  <TurnArrow modifier={navSteps[currentStepIdx]?.maneuverModifier || 'straight'} />
+                </div>
+                {/* Distance + street */}
+                <div className="flex-1 px-4 py-3">
+                  <p className="text-white font-black text-4xl leading-none tracking-tight">
+                    {distToNext !== null
+                      ? distToNext >= 1000
+                        ? `${(distToNext / 1000).toFixed(1)} km`
+                        : `${distToNext} m`
+                      : navSteps[currentStepIdx]?.distance
+                        ? navSteps[currentStepIdx].distance >= 1000
+                          ? `${(navSteps[currentStepIdx].distance / 1000).toFixed(1)} km`
+                          : `${navSteps[currentStepIdx].distance} m`
+                        : '—'
+                    }
                   </p>
-                )}
+                  <p className="text-white/80 text-sm font-semibold mt-0.5 leading-tight">
+                    {navSteps[currentStepIdx]?.instruction}
+                  </p>
+                </div>
+                {/* End nav button */}
+                <button
+                  onClick={endNavigation}
+                  className="w-16 h-20 bg-white/10 flex items-center justify-center shrink-0 border-l border-white/10"
+                >
+                  <X className="h-5 w-5 text-white/70" />
+                </button>
               </div>
-              <button
-                onClick={endNavigation}
-                className="shrink-0 bg-white/20 text-white text-xs font-bold px-3 py-2 rounded-xl"
-              >
-                End
-              </button>
+
+              {/* Next step preview */}
+              {currentStepIdx < navSteps.length - 1 && (
+                <button
+                  onClick={() => setShowNextTurns(v => !v)}
+                  className="w-full flex items-center gap-3 px-4 py-2 border-t border-white/10 hover:bg-white/5"
+                >
+                  <div className="w-6 h-6 rounded bg-white/20 flex items-center justify-center shrink-0">
+                    <TurnArrow modifier={navSteps[currentStepIdx + 1]?.maneuverModifier || 'straight'} />
+                  </div>
+                  <span className="flex-1 text-left text-white/60 text-xs truncate">
+                    Then: {navSteps[currentStepIdx + 1]?.instruction}
+                    {navSteps[currentStepIdx + 1]?.distance
+                      ? ` · ${navSteps[currentStepIdx + 1].distance}m`
+                      : ''}
+                  </span>
+                  <ChevronDown className={`h-4 w-4 text-white/40 transition-transform ${showNextTurns ? 'rotate-180' : ''}`} />
+                </button>
+              )}
             </div>
-            {/* Progress bar */}
-            <div className="flex items-center gap-2 px-4 pb-3">
-              <div className="flex-1 h-1.5 bg-white/20 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-white rounded-full transition-all duration-500"
-                  style={{ width: `${((currentStepIdx + 1) / Math.max(navSteps.length, 1)) * 100}%` }}
-                />
-              </div>
-              <span className="text-white/60 text-[10px] font-medium">{currentStepIdx + 1}/{navSteps.length}</span>
-            </div>
-            {/* Manual next step button (for when no GPS) */}
-            {!userPos && currentStepIdx < navSteps.length - 1 && (
-              <button
-                onClick={() => setCurrentStepIdx(i => Math.min(i + 1, navSteps.length - 1))}
-                className="w-full text-center text-white/60 text-xs pb-2 hover:text-white/90"
-              >
-                Tap to advance step manually
-              </button>
-            )}
+
+            {/* Next turns expandable list */}
+            <AnimatePresence>
+              {showNextTurns && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="bg-[#1a1a2e]/95 backdrop-blur-md overflow-hidden max-h-64 overflow-y-auto"
+                >
+                  {navSteps.slice(currentStepIdx + 1).map((step, i) => (
+                    <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-t border-white/10">
+                      <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
+                        <TurnArrow modifier={step.maneuverModifier} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white/80 text-sm font-medium leading-tight">{step.instruction}</p>
+                        {step.distance > 0 && (
+                          <p className="text-white/40 text-xs mt-0.5">{step.distance}m</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Top Bar */}
-      <div className="absolute top-0 left-0 right-0 z-[1000] p-3 flex gap-2" style={{ top: navMode && navSteps.length > 0 ? undefined : 0 }}>
-        {/* Location Picker */}
-        <button
-          onClick={() => setShowLocationPicker(v => !v)}
-          className="flex-1 flex items-center gap-2 bg-background/95 backdrop-blur-md border border-border rounded-xl px-3 py-2.5 shadow-lg"
-        >
-          <MapPin className="h-4 w-4 text-primary shrink-0" />
-          <div className="flex-1 text-left min-w-0">
-            <p className="text-xs text-muted-foreground leading-none">Exploring near</p>
-            <p className="text-sm font-semibold truncate">{selectedLocation.name}</p>
-          </div>
-          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${showLocationPicker ? 'rotate-180' : ''}`} />
-        </button>
+      {!navMode && (
+        <div className="absolute top-0 left-0 right-0 z-[1000] p-3 flex gap-2">
+          {/* Location Picker */}
+          <button
+            onClick={() => setShowLocationPicker(v => !v)}
+            className="flex-1 flex items-center gap-2 bg-background/95 backdrop-blur-md border border-border rounded-xl px-3 py-2.5 shadow-lg"
+          >
+            <MapPin className="h-4 w-4 text-primary shrink-0" />
+            <div className="flex-1 text-left min-w-0">
+              <p className="text-xs text-muted-foreground leading-none">Exploring near</p>
+              <p className="text-sm font-semibold truncate">{selectedLocation.name}</p>
+            </div>
+            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${showLocationPicker ? 'rotate-180' : ''}`} />
+          </button>
 
-        {/* Radius */}
-        <select
-          value={radius}
-          onChange={e => setRadius(Number(e.target.value))}
-          className="bg-background/95 backdrop-blur-md border border-border rounded-xl px-2 py-2.5 text-sm font-medium shadow-lg text-foreground"
-        >
-          {RADIUS_OPTIONS.map(r => (
-            <option key={r} value={r}>{r}m</option>
-          ))}
-        </select>
-      </div>
+          {/* Radius */}
+          <select
+            value={radius}
+            onChange={e => setRadius(Number(e.target.value))}
+            className="bg-background/95 backdrop-blur-md border border-border rounded-xl px-2 py-2.5 text-sm font-medium shadow-lg text-foreground"
+          >
+            {RADIUS_OPTIONS.map(r => (
+              <option key={r} value={r}>{r}m</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Location Picker Dropdown */}
-      <AnimatePresence>
-        {showLocationPicker && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="absolute top-[60px] left-3 right-3 z-[1001] bg-background border border-border rounded-2xl shadow-xl overflow-hidden"
-          >
-            {locations.map(loc => (
-              <button
-                key={loc.name}
-                onClick={() => { setSelectedLocation(loc); setShowLocationPicker(false) }}
-                className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors text-left ${selectedLocation.name === loc.name ? 'bg-primary/10' : ''}`}
-              >
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm ${trip.hotels.some(h => h.name === loc.name) ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-muted'}`}>
-                  {trip.hotels.some(h => h.name === loc.name) ? '🏨' : '📍'}
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{loc.name}</p>
-                  <p className="text-xs text-muted-foreground">{loc.country}</p>
-                </div>
-                {selectedLocation.name === loc.name && <div className="ml-auto w-2 h-2 rounded-full bg-primary" />}
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {!navMode && (
+        <AnimatePresence>
+          {showLocationPicker && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="absolute top-[60px] left-3 right-3 z-[1001] bg-background border border-border rounded-2xl shadow-xl overflow-hidden"
+            >
+              {locations.map(loc => (
+                <button
+                  key={loc.name}
+                  onClick={() => { setSelectedLocation(loc); setShowLocationPicker(false) }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors text-left ${selectedLocation.name === loc.name ? 'bg-primary/10' : ''}`}
+                >
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm ${trip.hotels.some(h => h.name === loc.name) ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-muted'}`}>
+                    {trip.hotels.some(h => h.name === loc.name) ? '🏨' : '📍'}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{loc.name}</p>
+                    <p className="text-xs text-muted-foreground">{loc.country}</p>
+                  </div>
+                  {selectedLocation.name === loc.name && <div className="ml-auto w-2 h-2 rounded-full bg-primary" />}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
 
       {/* Map */}
       <div ref={mapElRef} className="flex-1 w-full" style={{ zIndex: 1 }} />
+
+      {/* Nav bottom ETA bar */}
+      <AnimatePresence>
+        {navMode && routeInfo && (
+          <motion.div
+            initial={{ y: 80 }}
+            animate={{ y: 0 }}
+            exit={{ y: 80 }}
+            className="absolute bottom-[72px] left-0 right-0 z-[1002] bg-[#1a1a2e] border-t border-white/10 px-5 py-3 flex items-center justify-between"
+          >
+            <div className="text-center">
+              <p className="text-white font-black text-lg leading-none">{routeInfo.duration} min</p>
+              <p className="text-white/50 text-xs mt-0.5">walk</p>
+            </div>
+            <div className="text-center">
+              <p className="text-white font-black text-lg leading-none">
+                {routeInfo.distance >= 1000
+                  ? `${(routeInfo.distance / 1000).toFixed(1)} km`
+                  : `${routeInfo.distance} m`}
+              </p>
+              <p className="text-white/50 text-xs mt-0.5">total</p>
+            </div>
+            <div className="text-center">
+              <p className="text-white font-bold text-lg leading-none">
+                {(() => {
+                  const eta = new Date(Date.now() + routeInfo.duration * 60000)
+                  return eta.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                })()}
+              </p>
+              <p className="text-white/50 text-xs mt-0.5">arrival</p>
+            </div>
+            <button
+              onClick={endNavigation}
+              className="bg-red-500/20 text-red-400 text-xs font-bold px-4 py-2 rounded-xl"
+            >
+              End
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Category Filter Bar */}
       <div className="absolute bottom-0 left-0 right-0 z-[1000]">
 
         {/* POI Results Sheet */}
-        <AnimatePresence>
-          {showResults && pois.length > 0 && (
-            <motion.div
-              initial={{ y: 300 }}
-              animate={{ y: 0 }}
-              exit={{ y: 300 }}
-              transition={{ type: 'spring', damping: 25 }}
-              className="bg-background/95 backdrop-blur-md border-t border-border max-h-64 overflow-y-auto"
-            >
-              <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
-                <p className="text-sm font-semibold">{pois.length} places found</p>
-                <button onClick={() => setShowResults(false)}>
-                  <X className="h-4 w-4 text-muted-foreground" />
-                </button>
-              </div>
-              {pois.map(poi => {
-                const cat = CATEGORIES.find(c => c.id === activeCategory)!
-                return (
-                  <button
-                    key={poi.id}
-                    onClick={() => flyToPoi(poi)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors border-b border-border/30 text-left ${selectedPoi?.id === poi.id ? 'bg-primary/5' : ''}`}
-                  >
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: cat.markerColor + '20' }}>
-                      <cat.icon className="h-4 w-4" style={{ color: cat.markerColor }} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{poi.name}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{poi.type.replace(/_/g, ' ')} · {poi.distance}m away</p>
-                    </div>
-                    <Navigation className="h-4 w-4 text-muted-foreground shrink-0" />
+        {!navMode && (
+          <AnimatePresence>
+            {showResults && pois.length > 0 && (
+              <motion.div
+                initial={{ y: 300 }}
+                animate={{ y: 0 }}
+                exit={{ y: 300 }}
+                transition={{ type: 'spring', damping: 25 }}
+                className="bg-background/95 backdrop-blur-md border-t border-border max-h-64 overflow-y-auto"
+              >
+                <div className="flex items-center justify-between px-4 py-2 border-b border-border/50">
+                  <p className="text-sm font-semibold">{pois.length} places found</p>
+                  <button onClick={() => setShowResults(false)}>
+                    <X className="h-4 w-4 text-muted-foreground" />
                   </button>
-                )
-              })}
-            </motion.div>
-          )}
-        </AnimatePresence>
+                </div>
+                {pois.map(poi => {
+                  const cat = CATEGORIES.find(c => c.id === activeCategory)!
+                  return (
+                    <button
+                      key={poi.id}
+                      onClick={() => flyToPoi(poi)}
+                      className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors border-b border-border/30 text-left ${selectedPoi?.id === poi.id ? 'bg-primary/5' : ''}`}
+                    >
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: cat.markerColor + '20' }}>
+                        <cat.icon className="h-4 w-4" style={{ color: cat.markerColor }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{poi.name}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{poi.type.replace(/_/g, ' ')} · {poi.distance}m away</p>
+                      </div>
+                      <Navigation className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </button>
+                  )
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
 
         {/* Error */}
-        {error && (
+        {!navMode && error && (
           <div className="mx-3 mb-2 px-4 py-2 bg-destructive/10 text-destructive text-sm rounded-xl text-center">
             {error}
           </div>
         )}
 
         {/* Category Buttons */}
-        <div className="bg-background/95 backdrop-blur-md border-t border-border px-3 py-3">
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-            {CATEGORIES.map(cat => {
-              const isActive = activeCategory === cat.id
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => searchCategory(cat.id)}
-                  disabled={loading}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 border"
-                  style={{
-                    background: isActive ? cat.color : 'transparent',
-                    borderColor: isActive ? cat.color : 'var(--border)',
-                    color: isActive ? 'white' : cat.color,
-                  }}
-                >
-                  {loading && isActive
-                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    : <cat.icon className="h-3.5 w-3.5" />
-                  }
-                  {cat.label}
-                </button>
-              )
-            })}
+        {!navMode && (
+          <div className="bg-background/95 backdrop-blur-md border-t border-border px-3 py-3">
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+              {CATEGORIES.map(cat => {
+                const isActive = activeCategory === cat.id
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => searchCategory(cat.id)}
+                    disabled={loading}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 border"
+                    style={{
+                      background: isActive ? cat.color : 'transparent',
+                      borderColor: isActive ? cat.color : 'var(--border)',
+                      color: isActive ? 'white' : cat.color,
+                    }}
+                  >
+                    {loading && isActive
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <cat.icon className="h-3.5 w-3.5" />
+                    }
+                    {cat.label}
+                  </button>
+                )
+              })}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Selected POI Detail Card */}
