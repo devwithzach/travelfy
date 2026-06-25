@@ -15,8 +15,8 @@ export default async function handler(req, res) {
 
     const response = await fetch('https://overpass-api.de/api/interpreter', {
       method: 'POST',
-      body: query,
-      headers: { 'Content-Type': 'text/plain' },
+      body: `data=${encodeURIComponent(query)}`,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       signal: controller.signal,
     })
     clearTimeout(timeout)
