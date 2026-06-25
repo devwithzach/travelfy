@@ -118,9 +118,10 @@ async function fetchPOIs(lat: number, lon: number, categoryId: string, radius: n
 );
 out center 40;`
 
-  const res = await fetch('https://overpass-api.de/api/interpreter', {
+  const res = await fetch('/api/overpass', {
     method: 'POST',
-    body: overpassQuery,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: overpassQuery }),
   })
   if (!res.ok) throw new Error('Overpass API error')
   const data = await res.json()
