@@ -1,7 +1,7 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useLocation } from 'react-router-dom'
 import BottomNav from './BottomNav'
+import { useTrip } from '@/contexts/TripContext'
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -11,6 +11,11 @@ const pageVariants = {
 
 export default function MainLayout() {
   const location = useLocation()
+  const { activeTripId, loading } = useTrip()
+
+  if (loading) return null
+
+  if (!activeTripId) return <Navigate to="/" replace />
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

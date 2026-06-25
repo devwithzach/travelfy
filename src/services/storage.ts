@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type {
-  TripData, Flight, Hotel, ItineraryDay, ItineraryActivity,
+  TripData, TripSummary, Flight, Hotel, ItineraryDay, ItineraryActivity,
   ChecklistItem, Expense, Document, EmergencyContact, QuickLink,
   Note, VisaInfo, CurrencyRate
 } from '@/types'
@@ -179,6 +179,131 @@ async function syncTable(
 // ── Main service ──────────────────────────────────────────
 
 export const storageService = {
+
+  async listTrips(userId: string): Promise<TripSummary[]> {
+    const { data } = await supabase
+      .from('trips')
+      .select('id, name, destination, start_date, end_date, status, cover_image')
+      .eq('user_id', userId)
+      .order('start_date', { ascending: false })
+    return (data || []).map(r => ({
+      id: r.id as string,
+      name: r.name as string || '',
+      destination: r.destination as string || '',
+      startDate: r.start_date as string || '',
+      endDate: r.end_date as string || '',
+      status: (r.status as TripSummary['status']) || 'upcoming',
+      coverImage: r.cover_image as string || '',
+    }))
+  },
+
+  async getTripById(userId: string, tripId: string): Promise<TripData> {
+    const { data: tripRow } = await supabase
+      .from('trips')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('id', tripId)
+      .maybeSingle()
+
+    if (!tripRow) return createEmptyTrip(tripId)
+
+    // Parallel fetch all related data
+    const [
+      { data: flights },
+      { data: hotels },
+      { data: days },
+      { data: checklist },
+      { data: expenses },
+      { data: documents },
+      { data: contacts },
+      { data: links },
+      { data: notes },
+      { data: passport },
+      { data: visas },
+      { data: rates },
+    ] = await Promise.all([
+      supabase.from('flights').select('*').eq('trip_id', tripId).order('sort_order'),
+      supabase.from('hotels').select('*').eq('trip_id', tripId).order('check_in'),
+      supabase.from('itinerary_days').select('*, itinerary_activities(*)').eq('trip_id', tripId).order('day_number'),
+      supabase.from('checklist_items').select('*').eq('trip_id', tripId).order('sort_order'),
+      supabase.from('expenses').select('*').eq('trip_id', tripId).order('created_at', { ascending: false }),
+      supabase.from('documents').select('*').eq('trip_id', tripId),
+      supabase.from('emergency_contacts').select('*').eq('trip_id', tripId),
+      supabase.from('quick_links').select('*').eq('trip_id', tripId).order('sort_order'),
+      supabase.from('notes').select('*').eq('trip_id', tripId).order('updated_at', { ascending: false }),
+      supabase.from('passport_info').select('*').eq('user_id', userId).maybeSingle(),
+      supabase.from('visas').select('*').eq('trip_id', tripId),
+      supabase.from('currency_rates').select('*').eq('user_id', userId),
+    ])
+
+    return {
+      tripInfo: {
+        id: tripRow.id as string,
+        name: tripRow.name as string || '',
+        destination: tripRow.destination as string || '',
+        startDate: tripRow.start_date as string || '',
+        endDate: tripRow.end_date as string || '',
+        coverImage: tripRow.cover_image as string || '',
+        description: tripRow.description as string || '',
+        status: (tripRow.status as 'upcoming' | 'active' | 'completed') || 'upcoming',
+      },
+      settings: {
+        travelerName: tripRow.traveler_name as string || '',
+        profilePicture: tripRow.profile_picture as string || '',
+        theme: 'system',
+        homeCurrency: tripRow.home_currency as string || 'PHP',
+        language: tripRow.language as string || 'en',
+        totalBudget: tripRow.total_budget as number || 0,
+      },
+      tourNotes: (tripRow.tour_notes as string[]) || [],
+      restrictions: (tripRow.restrictions as string[]) || [],
+      flights: (flights || []).map(r => mapFlight(r as Record<string, unknown>)),
+      hotels: (hotels || []).map(r => mapHotel(r as Record<string, unknown>)),
+      itinerary: (days || []).map(r => mapDay(r as Record<string, unknown>)),
+      checklist: (checklist || []).map(r => mapChecklist(r as Record<string, unknown>)),
+      expenses: (expenses || []).map(r => mapExpense(r as Record<string, unknown>)),
+      documents: (documents || []).map(r => mapDocument(r as Record<string, unknown>)),
+      emergencyContacts: (contacts || []).map(r => mapContact(r as Record<string, unknown>)),
+      quickLinks: (links || []).map(r => mapLink(r as Record<string, unknown>)),
+      notes: (notes || []).map(r => mapNote(r as Record<string, unknown>)),
+      passport: passport ? {
+        fullName: passport.full_name as string || '',
+        passportNumber: passport.passport_number as string || '',
+        nationality: passport.nationality as string || '',
+        dateOfBirth: passport.date_of_birth as string || '',
+        issueDate: passport.issue_date as string || '',
+        expiryDate: passport.expiry_date as string || '',
+        issuingCountry: passport.issuing_country as string || '',
+      } : createEmptyTrip().passport,
+      visas: (visas || []).map(r => mapVisa(r as Record<string, unknown>)),
+      currencyRates: (rates || []).map(r => mapRate(r as Record<string, unknown>)),
+      lastUpdated: new Date().toISOString(),
+    }
+  },
+
+  async createTrip(userId: string, info: { name: string; destination: string; startDate: string; endDate: string; description: string }): Promise<string> {
+    const id = crypto.randomUUID()
+    await supabase.from('trips').insert({
+      id,
+      user_id: userId,
+      name: info.name,
+      destination: info.destination,
+      start_date: info.startDate,
+      end_date: info.endDate,
+      description: info.description,
+      status: 'upcoming',
+      home_currency: 'PHP',
+      language: 'en',
+      total_budget: 0,
+      tour_notes: [],
+      restrictions: [],
+    })
+    return id
+  },
+
+  async deleteTripById(tripId: string, userId: string): Promise<void> {
+    await supabase.from('trips').delete().eq('id', tripId).eq('user_id', userId)
+  },
 
   async getTrip(userId: string): Promise<TripData> {
     // Get most recent trip for user

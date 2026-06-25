@@ -149,6 +149,16 @@ export interface TripSettings {
   totalBudget: number
 }
 
+export interface TripSummary {
+  id: string
+  name: string
+  destination: string
+  startDate: string
+  endDate: string
+  status: 'upcoming' | 'active' | 'completed'
+  coverImage: string
+}
+
 export interface TripInfo {
   id: string
   name: string

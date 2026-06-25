@@ -5,6 +5,7 @@ import { TripProvider } from '@/contexts/TripContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import MainLayout from '@/layouts/MainLayout'
 import Login from '@/pages/Login'
+import Trips from '@/pages/Trips'
 import Dashboard from '@/pages/Dashboard'
 import Flights from '@/pages/Flights'
 import Hotels from '@/pages/Hotels'
@@ -48,8 +49,12 @@ function AppRoutes() {
   return (
     <TripProvider>
       <Routes>
+        {/* Trips list - no bottom nav */}
+        <Route path="/" element={<Trips />} />
+
+        {/* All trip-specific routes inside MainLayout */}
         <Route element={<MainLayout />}>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/flights" element={<Flights />} />
           <Route path="/hotels" element={<Hotels />} />
           <Route path="/timeline" element={<Timeline />} />
