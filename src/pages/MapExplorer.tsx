@@ -269,15 +269,28 @@ export default function MapExplorer() {
     trip.hotels.forEach(h => {
       if (parseMapsUrl(h.mapsUrl)) return
       if (geocodedHotels[h.id]) return
-      const query = h.address?.trim() || `${h.name} ${h.address ?? ''}`.trim() || h.name
-      if (!query) return
-      geocodeAddress(query).then(result => {
-        if (cancelled || !result) return
-        setGeocodedHotels(prev => ({ ...prev, [h.id]: result }))
-      })
+      // Build a few candidate queries from most specific to least, so a missing
+      // address or vague name still has a chance.
+      const candidates = [
+        [h.name, h.address].filter(Boolean).join(', '),
+        [h.name, trip.tripInfo.destination].filter(Boolean).join(', '),
+        h.address,
+        h.name,
+      ].filter((q): q is string => !!q && q.trim().length > 0)
+      ;(async () => {
+        for (const query of candidates) {
+          const result = await geocodeAddress(query)
+          if (cancelled) return
+          if (result) {
+            setGeocodedHotels(prev => ({ ...prev, [h.id]: result }))
+            return
+          }
+        }
+        console.warn('[MapExplorer] geocode failed for hotel:', h.name, candidates)
+      })()
     })
     return () => { cancelled = true }
-  }, [trip.hotels])
+  }, [trip.hotels, trip.tripInfo.destination])
 
   // Build location list from trip data. Hotels appear if mapsUrl contains coords
   // OR if address geocoding has resolved them.
@@ -350,23 +363,25 @@ export default function MapExplorer() {
     }
   }, [])
 
-  // Add hotel markers
+  // Add hotel markers. Must depend on geocodedHotels too so pins appear once
+  // address geocoding resolves.
   useEffect(() => {
     if (!mapRef.current) return
     hotelMarkersRef.current.forEach(m => mapRef.current!.removeLayer(m))
     hotelMarkersRef.current = []
 
-    locations.forEach(loc => {
-      if (!trip.hotels.some(h => h.name === loc.name)) return
-      const m = L.marker([loc.lat, loc.lon], { icon: createHotelMarker() })
+    trip.hotels.forEach(h => {
+      const coords = parseMapsUrl(h.mapsUrl) ?? geocodedHotels[h.id]
+      if (!coords) return
+      const m = L.marker([coords.lat, coords.lon], { icon: createHotelMarker() })
         .addTo(mapRef.current!)
         .bindPopup(buildPopup([
-          { tag: 'b', text: loc.name },
-          { tag: 'span', text: loc.country },
+          { tag: 'b', text: h.name },
+          { tag: 'span', text: h.address || '' },
         ]))
       hotelMarkersRef.current.push(m)
     })
-  }, [trip.hotels])
+  }, [trip.hotels, geocodedHotels])
 
   // Fly to selected location
   useEffect(() => {

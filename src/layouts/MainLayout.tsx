@@ -29,7 +29,7 @@ export default function MainLayout() {
     )
   }
 
-  if (!activeTripId) return <Navigate to="/" replace />
+  if (!activeTripId) return <Navigate to="/trips" replace />
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

@@ -2,7 +2,7 @@
 // in localStorage to avoid hammering the public API and to respect their usage
 // policy (https://operations.osmfoundation.org/policies/nominatim/).
 
-const CACHE_KEY = 'travelfy-geocode-cache-v1'
+const CACHE_KEY = 'travelfy-geocode-cache-v2'
 const NEGATIVE_TTL_MS = 1000 * 60 * 60 * 24 * 7 // 7 days
 
 interface CacheEntry {

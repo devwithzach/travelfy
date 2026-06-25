@@ -55,7 +55,7 @@ export default function Trips() {
 
   const handleSelect = (trip: TripSummary) => {
     selectTrip(trip.id)
-    navigate('/dashboard')
+    navigate('/')
   }
 
   const handleCreate = async () => {
@@ -66,7 +66,7 @@ export default function Trips() {
       setCreateOpen(false)
       setForm(emptyForm)
       selectTrip(id)
-      navigate('/dashboard')
+      navigate('/')
     } finally {
       setCreating(false)
     }

@@ -49,12 +49,12 @@ function AppRoutes() {
   return (
     <TripProvider>
       <Routes>
-        {/* Trips list - no bottom nav */}
-        <Route path="/" element={<Trips />} />
+        {/* Trips list - own layout (no bottom nav). Standalone picker. */}
+        <Route path="/trips" element={<Trips />} />
 
-        {/* All trip-specific routes inside MainLayout */}
+        {/* App pages inside MainLayout, with Dashboard at / */}
         <Route element={<MainLayout />}>
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/" element={<Dashboard />} />
           <Route path="/flights" element={<Flights />} />
           <Route path="/hotels" element={<Hotels />} />
           <Route path="/timeline" element={<Timeline />} />

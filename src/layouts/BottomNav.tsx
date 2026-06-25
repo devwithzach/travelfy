@@ -9,8 +9,8 @@ import {
 import { cn } from '@/utils/cn'
 
 const mainNav = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Home' },
-  { to: '/', icon: Layers, label: 'My Trips' },
+  { to: '/', icon: LayoutDashboard, label: 'Home' },
+  { to: '/trips', icon: Layers, label: 'My Trips' },
   { to: '/timeline', icon: Map, label: 'Timeline' },
   { to: '/map', icon: MapPin, label: 'Explore' },
 ]
@@ -109,7 +109,7 @@ export default function BottomNav() {
             <NavLink
               key={to}
               to={to}
-              end={to === '/dashboard'}
+              end={to === '/'}
               className={({ isActive }) =>
                 cn(
                   'flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-xl transition-all duration-200 relative',
