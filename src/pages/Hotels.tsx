@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Building2, Plus, Edit2, Trash2, MapPin, Phone, Globe, Calendar, Copy, ExternalLink } from 'lucide-react'
+import { Building2, Plus, Edit2, Trash2, MapPin, Phone, Globe, Calendar, Copy } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useTrip } from '@/contexts/TripContext'
 import type { Hotel } from '@/types'
 import PageHeader from '@/components/common/PageHeader'
@@ -30,6 +31,7 @@ const defaultHotel = (): Hotel => ({
 
 export default function Hotels() {
   const { trip, updateTrip } = useTrip()
+  const navigate = useNavigate()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Hotel | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
@@ -163,18 +165,15 @@ export default function Hotels() {
 
                     {/* Actions */}
                     <div className="flex gap-2">
-                      {hotel.mapsUrl && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 h-8 text-xs"
-                          onClick={() => window.open(hotel.mapsUrl, '_blank')}
-                        >
-                          <MapPin className="h-3.5 w-3.5 mr-1" />
-                          Maps
-                          <ExternalLink className="h-3 w-3 ml-1 opacity-50" />
-                        </Button>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 h-8 text-xs"
+                        onClick={() => navigate('/map')}
+                      >
+                        <MapPin className="h-3.5 w-3.5 mr-1" />
+                        Explore Map
+                      </Button>
                       {hotel.address && (
                         <Button
                           variant="outline"
@@ -263,8 +262,8 @@ export default function Hotels() {
                 <Input type="url" value={editing.website} onChange={e => setEditing({ ...editing, website: e.target.value })} placeholder="https://..." />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Google Maps URL</Label>
-                <Input type="url" value={editing.mapsUrl} onChange={e => setEditing({ ...editing, mapsUrl: e.target.value })} placeholder="https://maps.google.com/..." />
+                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Address / Map Reference (optional)</Label>
+                <Input type="text" value={editing.mapsUrl} onChange={e => setEditing({ ...editing, mapsUrl: e.target.value })} placeholder="Full address or landmark" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wide">Notes</Label>

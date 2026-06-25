@@ -7,8 +7,7 @@ import markerShadow from 'leaflet/dist/images/marker-shadow.png'
 import { useTrip } from '@/contexts/TripContext'
 import {
   MapPin, UtensilsCrossed, ShoppingBag, Camera, Gift,
-  Bus, Pill, ChevronDown, Loader2, Navigation, X, Star,
-  ExternalLink, Search
+  Bus, Pill, ChevronDown, Loader2, Navigation, X, Clock, Footprints
 } from 'lucide-react'
 
 // Fix Leaflet default icon issue with Vite
@@ -214,6 +213,9 @@ export default function MapExplorer() {
   const [showLocationPicker, setShowLocationPicker] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const [selectedPoi, setSelectedPoi] = useState<POI | null>(null)
+  const [routeInfo, setRouteInfo] = useState<{ distance: number; duration: number } | null>(null)
+  const [routeLayer, setRouteLayer] = useState<L.Polyline | null>(null)
+  const [navigating, setNavigating] = useState(false)
 
   // Init map
   useEffect(() => {
@@ -321,7 +323,38 @@ export default function MapExplorer() {
 
   const flyToPoi = (poi: POI) => {
     setSelectedPoi(poi)
+    setRouteInfo(null)
+    if (routeLayer && mapRef.current) { mapRef.current.removeLayer(routeLayer); setRouteLayer(null) }
     mapRef.current?.flyTo([poi.lat, poi.lon], 17, { duration: 0.8 })
+  }
+
+  const navigateToPoi = async (poi: POI) => {
+    if (!mapRef.current) return
+    setNavigating(true)
+    if (routeLayer) { mapRef.current.removeLayer(routeLayer); setRouteLayer(null) }
+    setRouteInfo(null)
+    try {
+      const { lat: fLat, lon: fLon } = selectedLocation
+      const url = `https://router.project-osrm.org/route/v1/foot/${fLon},${fLat};${poi.lon},${poi.lat}?overview=full&geometries=geojson`
+      const res = await fetch(url)
+      const data = await res.json()
+      if (data.code !== 'Ok') throw new Error('No route')
+      const route = data.routes[0]
+      const coords: [number, number][] = route.geometry.coordinates.map(([lon, lat]: [number, number]) => [lat, lon])
+      const poly = L.polyline(coords, { color: '#2563EB', weight: 5, opacity: 0.85, lineCap: 'round', lineJoin: 'round' }).addTo(mapRef.current)
+      setRouteLayer(poly)
+      setRouteInfo({ distance: Math.round(route.distance), duration: Math.round(route.duration / 60) })
+      mapRef.current.fitBounds(poly.getBounds().pad(0.15))
+    } catch {
+      alert('Could not find a walking route.')
+    } finally {
+      setNavigating(false)
+    }
+  }
+
+  const clearRoute = () => {
+    if (routeLayer && mapRef.current) { mapRef.current.removeLayer(routeLayer); setRouteLayer(null) }
+    setRouteInfo(null)
   }
 
   return (
@@ -493,14 +526,31 @@ export default function MapExplorer() {
                 <p className="text-xs text-muted-foreground mt-0.5 capitalize">🍽 {selectedPoi.tags.cuisine}</p>
               )}
             </div>
-            <a
-              href={`https://www.openstreetmap.org/?mlat=${selectedPoi.lat}&mlon=${selectedPoi.lon}#map=18/${selectedPoi.lat}/${selectedPoi.lon}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-primary"
-            >
-              <ExternalLink className="h-3 w-3" /> Open in Maps
-            </a>
+            {routeInfo && (
+              <div className="mt-2 flex gap-2">
+                <span className="flex items-center gap-1 text-xs font-semibold text-primary">
+                  <Footprints className="h-3 w-3" />{routeInfo.distance}m
+                </span>
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Clock className="h-3 w-3" />{routeInfo.duration} min walk
+                </span>
+              </div>
+            )}
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={() => navigateToPoi(selectedPoi)}
+                disabled={navigating}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-primary text-white text-xs font-bold disabled:opacity-60"
+              >
+                {navigating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Navigation className="h-3.5 w-3.5" />}
+                {navigating ? 'Routing…' : 'Navigate'}
+              </button>
+              {routeInfo && (
+                <button onClick={clearRoute} className="px-3 py-2 rounded-xl bg-muted text-xs font-medium">
+                  Clear
+                </button>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
