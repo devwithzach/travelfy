@@ -8,11 +8,15 @@ import { useTrip } from '@/contexts/TripContext'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import {
-  MapPin, UtensilsCrossed, ShoppingBag, Camera, Gift,
-  Bus, Pill, ChevronDown, Loader2, Navigation, X, Clock, Footprints,
-  ArrowUp, ArrowLeft, ArrowRight, ArrowUpLeft, ArrowUpRight, RotateCcw,
+  UtensilsCrossed, ShoppingBag, Camera, Gift,
+  Bus, Pill, Loader2, Navigation, X, Clock, Footprints,
   Bookmark, BookmarkCheck, Star
 } from 'lucide-react'
+import NavigationBanner from '@/components/map/NavigationBanner'
+import SavePlaceSheet from '@/components/map/SavePlaceSheet'
+import LocationPicker from '@/components/map/LocationPicker'
+import { geocodeAddress } from '@/components/map/geocode'
+import type { POI, Location, NavStep, SavedPlace } from '@/components/map/types'
 
 // Fix Leaflet default icon issue with Vite
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -21,49 +25,6 @@ L.Icon.Default.mergeOptions({
   iconRetinaUrl: markerIcon2x,
   shadowUrl: markerShadow,
 })
-
-// ── Types ────────────────────────────────────────────────────
-
-interface POI {
-  id: number
-  lat: number
-  lon: number
-  name: string
-  type: string
-  tags: Record<string, string>
-  distance?: number
-}
-
-interface Location {
-  name: string
-  lat: number
-  lon: number
-  country: string
-}
-
-interface NavStep {
-  instruction: string
-  distance: number
-  lat: number
-  lon: number
-  maneuverType: string
-  maneuverModifier: string
-}
-
-interface SavedPlace {
-  id: string
-  user_id: string
-  trip_id: string
-  osm_id: number
-  name: string
-  type: string
-  lat: number
-  lon: number
-  tags: Record<string, string>
-  rating: number
-  notes: string
-  saved_at: string
-}
 
 // ── Categories ───────────────────────────────────────────────
 
@@ -286,19 +247,6 @@ function formatInstruction(step: any): string {
   return `${type}${name}`
 }
 
-function TurnArrow({ modifier }: { modifier: string }) {
-  const iconMap: Record<string, React.ComponentType<any>> = {
-    left: ArrowLeft,
-    right: ArrowRight,
-    'slight left': ArrowUpLeft,
-    'slight right': ArrowUpRight,
-    straight: ArrowUp,
-    uturn: RotateCcw,
-  }
-  const Icon = iconMap[modifier] || ArrowUp
-  return <Icon className="h-7 w-7 text-white" strokeWidth={2.5} />
-}
-
 // ── Main Component ───────────────────────────────────────────
 
 export default function MapExplorer() {
@@ -312,11 +260,31 @@ export default function MapExplorer() {
   const userMarkerRef = useRef<L.CircleMarker | null>(null)
   const savedMarkersRef = useRef<L.Layer[]>([])
 
-  // Build location list from trip data. Only include hotels with parseable coords.
+  // Geocoded hotel coords (lazily populated when mapsUrl doesn't contain coords)
+  const [geocodedHotels, setGeocodedHotels] = useState<Record<string, { lat: number; lon: number }>>({})
+
+  // Geocode any hotel whose mapsUrl doesn't yield coords.
+  useEffect(() => {
+    let cancelled = false
+    trip.hotels.forEach(h => {
+      if (parseMapsUrl(h.mapsUrl)) return
+      if (geocodedHotels[h.id]) return
+      const query = h.address?.trim() || `${h.name} ${h.address ?? ''}`.trim() || h.name
+      if (!query) return
+      geocodeAddress(query).then(result => {
+        if (cancelled || !result) return
+        setGeocodedHotels(prev => ({ ...prev, [h.id]: result }))
+      })
+    })
+    return () => { cancelled = true }
+  }, [trip.hotels])
+
+  // Build location list from trip data. Hotels appear if mapsUrl contains coords
+  // OR if address geocoding has resolved them.
   const locations: Location[] = [
     ...trip.hotels
       .map(h => {
-        const coords = parseMapsUrl(h.mapsUrl)
+        const coords = parseMapsUrl(h.mapsUrl) ?? geocodedHotels[h.id]
         if (!coords) return null
         return { name: h.name, lat: coords.lat, lon: coords.lon, country: '' }
       })
@@ -666,154 +634,30 @@ export default function MapExplorer() {
       {/* Waze-style Nav Banner */}
       <AnimatePresence>
         {navMode && navSteps.length > 0 && (
-          <motion.div
-            initial={{ y: -120 }}
-            animate={{ y: 0 }}
-            exit={{ y: -120 }}
-            transition={{ type: 'spring', damping: 28 }}
-            className="absolute top-0 left-0 right-0 z-[1003]"
-          >
-            {/* Main instruction bar */}
-            <div className="bg-[#1a1a2e] shadow-2xl">
-              <div className="flex items-center gap-0 px-0">
-                {/* Turn arrow box */}
-                <div className="w-20 h-20 bg-primary flex items-center justify-center shrink-0">
-                  <TurnArrow modifier={navSteps[currentStepIdx]?.maneuverModifier || 'straight'} />
-                </div>
-                {/* Distance + street */}
-                <div className="flex-1 px-4 py-3">
-                  <p className="text-white font-black text-4xl leading-none tracking-tight">
-                    {distToNext !== null
-                      ? distToNext >= 1000
-                        ? `${(distToNext / 1000).toFixed(1)} km`
-                        : `${distToNext} m`
-                      : navSteps[currentStepIdx]?.distance
-                        ? navSteps[currentStepIdx].distance >= 1000
-                          ? `${(navSteps[currentStepIdx].distance / 1000).toFixed(1)} km`
-                          : `${navSteps[currentStepIdx].distance} m`
-                        : '—'
-                    }
-                  </p>
-                  <p className="text-white/80 text-sm font-semibold mt-0.5 leading-tight">
-                    {navSteps[currentStepIdx]?.instruction}
-                  </p>
-                </div>
-                {/* End nav button */}
-                <button
-                  onClick={endNavigation}
-                  className="w-16 h-20 bg-white/10 flex items-center justify-center shrink-0 border-l border-white/10"
-                >
-                  <X className="h-5 w-5 text-white/70" />
-                </button>
-              </div>
-
-              {/* Next step preview */}
-              {currentStepIdx < navSteps.length - 1 && (
-                <button
-                  onClick={() => setShowNextTurns(v => !v)}
-                  className="w-full flex items-center gap-3 px-4 py-2 border-t border-white/10 hover:bg-white/5"
-                >
-                  <div className="w-6 h-6 rounded bg-white/20 flex items-center justify-center shrink-0">
-                    <TurnArrow modifier={navSteps[currentStepIdx + 1]?.maneuverModifier || 'straight'} />
-                  </div>
-                  <span className="flex-1 text-left text-white/60 text-xs truncate">
-                    Then: {navSteps[currentStepIdx + 1]?.instruction}
-                    {navSteps[currentStepIdx + 1]?.distance
-                      ? ` · ${navSteps[currentStepIdx + 1].distance}m`
-                      : ''}
-                  </span>
-                  <ChevronDown className={`h-4 w-4 text-white/40 transition-transform ${showNextTurns ? 'rotate-180' : ''}`} />
-                </button>
-              )}
-            </div>
-
-            {/* Next turns expandable list */}
-            <AnimatePresence>
-              {showNextTurns && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="bg-[#1a1a2e]/95 backdrop-blur-md overflow-hidden max-h-64 overflow-y-auto"
-                >
-                  {navSteps.slice(currentStepIdx + 1).map((step, i) => (
-                    <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-t border-white/10">
-                      <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
-                        <TurnArrow modifier={step.maneuverModifier} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white/80 text-sm font-medium leading-tight">{step.instruction}</p>
-                        {step.distance > 0 && (
-                          <p className="text-white/40 text-xs mt-0.5">{step.distance}m</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
+          <NavigationBanner
+            steps={navSteps}
+            currentStepIdx={currentStepIdx}
+            distToNext={distToNext}
+            showNextTurns={showNextTurns}
+            onToggleNextTurns={() => setShowNextTurns(v => !v)}
+            onEnd={endNavigation}
+          />
         )}
       </AnimatePresence>
 
-      {/* Top Bar */}
+      {/* Top Bar + Location Picker */}
       {!navMode && (
-        <div className="absolute top-0 left-0 right-0 z-[1000] p-3 flex gap-2">
-          {/* Location Picker */}
-          <button
-            onClick={() => setShowLocationPicker(v => !v)}
-            className="flex-1 flex items-center gap-2 bg-background/95 backdrop-blur-md border border-border rounded-xl px-3 py-2.5 shadow-lg"
-          >
-            <MapPin className="h-4 w-4 text-primary shrink-0" />
-            <div className="flex-1 text-left min-w-0">
-              <p className="text-xs text-muted-foreground leading-none">Exploring near</p>
-              <p className="text-sm font-semibold truncate">{selectedLocation.name}</p>
-            </div>
-            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${showLocationPicker ? 'rotate-180' : ''}`} />
-          </button>
-
-          {/* Radius */}
-          <select
-            value={radius}
-            onChange={e => setRadius(Number(e.target.value))}
-            className="bg-background/95 backdrop-blur-md border border-border rounded-xl px-2 py-2.5 text-sm font-medium shadow-lg text-foreground"
-          >
-            {RADIUS_OPTIONS.map(r => (
-              <option key={r} value={r}>{r}m</option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Location Picker Dropdown */}
-      {!navMode && (
-        <AnimatePresence>
-          {showLocationPicker && (
-            <motion.div
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="absolute top-[60px] left-3 right-3 z-[1001] bg-background border border-border rounded-2xl shadow-xl overflow-hidden"
-            >
-              {locations.map(loc => (
-                <button
-                  key={loc.name}
-                  onClick={() => { setSelectedLocation(loc); setShowLocationPicker(false) }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors text-left ${selectedLocation.name === loc.name ? 'bg-primary/10' : ''}`}
-                >
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm ${trip.hotels.some(h => h.name === loc.name) ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-muted'}`}>
-                    {trip.hotels.some(h => h.name === loc.name) ? '🏨' : '📍'}
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{loc.name}</p>
-                    <p className="text-xs text-muted-foreground">{loc.country}</p>
-                  </div>
-                  {selectedLocation.name === loc.name && <div className="ml-auto w-2 h-2 rounded-full bg-primary" />}
-                </button>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <LocationPicker
+          selected={selectedLocation}
+          locations={locations}
+          hotels={trip.hotels}
+          open={showLocationPicker}
+          onToggle={() => setShowLocationPicker(v => !v)}
+          onSelect={loc => { setSelectedLocation(loc); setShowLocationPicker(false) }}
+          radius={radius}
+          radiusOptions={RADIUS_OPTIONS}
+          onRadiusChange={setRadius}
+        />
       )}
 
       {/* Map */}
@@ -1044,61 +888,16 @@ export default function MapExplorer() {
       {/* Save Place Sheet */}
       <AnimatePresence>
         {saveSheet && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[1010] bg-black/50"
-              onClick={() => setSaveSheet(null)}
-            />
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 28 }}
-              className="fixed bottom-0 left-0 right-0 z-[1011] bg-background rounded-t-3xl p-5 pb-8 shadow-2xl"
-            >
-              <div className="w-10 h-1 rounded-full bg-border mx-auto mb-4" />
-              <h3 className="font-bold text-base mb-0.5">{saveSheet.name}</h3>
-              <p className="text-xs text-muted-foreground capitalize mb-4">{saveSheet.type.replace(/_/g, ' ')}</p>
-
-              {/* Star rating */}
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Rating</p>
-              <div className="flex gap-2 mb-4">
-                {[1,2,3,4,5].map(n => (
-                  <button key={n} onClick={() => setSaveRating(n)} className="focus:outline-none">
-                    <Star className={`h-8 w-8 transition-colors ${n <= saveRating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}`} />
-                  </button>
-                ))}
-              </div>
-
-              {/* Notes */}
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Notes (optional)</p>
-              <textarea
-                value={saveNotes}
-                onChange={e => setSaveNotes(e.target.value)}
-                placeholder="What did you think? Great food, must visit again..."
-                rows={2}
-                className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 mb-4"
-              />
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSaveSheet(null)}
-                  className="flex-1 py-3 rounded-xl bg-muted text-sm font-medium"
-                >Cancel</button>
-                <button
-                  onClick={savePlace}
-                  disabled={saving}
-                  className="flex-1 py-3 rounded-xl bg-amber-500 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-60"
-                >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BookmarkCheck className="h-4 w-4" />}
-                  Save Place
-                </button>
-              </div>
-            </motion.div>
-          </>
+          <SavePlaceSheet
+            poi={saveSheet}
+            rating={saveRating}
+            notes={saveNotes}
+            saving={saving}
+            onRatingChange={setSaveRating}
+            onNotesChange={setSaveNotes}
+            onCancel={() => setSaveSheet(null)}
+            onSave={savePlace}
+          />
         )}
       </AnimatePresence>
     </div>
