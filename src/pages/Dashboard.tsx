@@ -13,6 +13,7 @@ import { countryFlag } from '@/components/map/geocode'
 import { getDaysUntil, formatDate, formatShortDate, getTripProgress, getTripStatus, formatTime } from '@/utils/dateUtils'
 import { sumExpenses } from '@/utils/currency'
 import { findInProgressActivity, findNextUpcomingActivity, localDateStr } from '@/utils/itinerary'
+import { findNextFlight, deriveFlightStatus } from '@/utils/flight'
 import QuickAddExpense from '@/components/common/QuickAddExpense'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -78,7 +79,8 @@ export default function Dashboard() {
   const tripStatus = getTripStatus(tripInfo.startDate, tripInfo.endDate)
   const progress = getTripProgress(tripInfo.startDate, tripInfo.endDate)
 
-  const nextFlight = flights.find(f => f.status === 'upcoming') || flights[0]
+  const nextFlight = findNextFlight(flights, now)
+  const nextFlightStatus = nextFlight ? deriveFlightStatus(nextFlight, now) : null
   const checkedCount = checklist.filter(c => c.checked).length
   const totalBudget = settings.totalBudget
   const { total: spentAmount } = sumExpenses(trip.currencyRates, expenses, settings.homeCurrency)
@@ -303,7 +305,11 @@ export default function Dashboard() {
                     <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30">
                       <Plane className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                     </div>
-                    <span className="text-sm font-semibold">Next Flight</span>
+                    <span className="text-sm font-semibold">
+                      {nextFlightStatus === 'boarding' ? 'Boarding now'
+                        : nextFlightStatus === 'departed' ? 'In flight'
+                        : 'Next Flight'}
+                    </span>
                   </div>
                   <div className="flex items-center gap-1 text-muted-foreground">
                     <span className="text-xs">{nextFlight.flightNumber}</span>

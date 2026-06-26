@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatDate, formatTime } from '@/utils/dateUtils'
+import { deriveFlightStatus } from '@/utils/flight'
 
 const defaultFlight = (): Flight => ({
   id: crypto.randomUUID(),
@@ -109,9 +110,14 @@ export default function Flights() {
                       <div>
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="font-bold text-lg">{flight.flightNumber}</span>
-                          <Badge variant={statusColors[flight.status] as 'info' | 'warning' | 'secondary' | 'success'}>
-                            {flight.status}
-                          </Badge>
+                          {(() => {
+                            const live = deriveFlightStatus(flight)
+                            return (
+                              <Badge variant={statusColors[live] as 'info' | 'warning' | 'secondary' | 'success'}>
+                                {live}
+                              </Badge>
+                            )
+                          })()}
                         </div>
                         <p className="text-xs text-muted-foreground">{flight.airline}</p>
                       </div>
