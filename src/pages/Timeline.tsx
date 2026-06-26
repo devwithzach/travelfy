@@ -246,11 +246,31 @@ export default function Timeline() {
     }))
   }
 
+  // Per-day status summary for header subtitle.
+  const summary = trip.itinerary.reduce(
+    (acc, d) => {
+      const phase = dayPhase(d.date, now)
+      const total = d.activities.length
+      const allDone = phase === 'past' || (total > 0 && d.activities.every(a => isDone(a, d.date)))
+      if (allDone) acc.done++
+      else if (phase === 'today') acc.ongoing++
+      else if (phase === 'future') acc.upcoming++
+      else acc.unknown++
+      return acc
+    },
+    { done: 0, ongoing: 0, upcoming: 0, unknown: 0 },
+  )
+  const subtitleParts: string[] = []
+  if (summary.done) subtitleParts.push(`${summary.done} done`)
+  if (summary.ongoing) subtitleParts.push(`${summary.ongoing} ongoing`)
+  if (summary.upcoming) subtitleParts.push(`${summary.upcoming} upcoming`)
+  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : `${trip.itinerary.length} days`
+
   return (
     <div>
       <PageHeader
         title="Timeline"
-        subtitle={`${trip.itinerary.length} days`}
+        subtitle={subtitle}
         icon={Map}
         iconColor="text-emerald-600"
         action={
@@ -298,9 +318,15 @@ export default function Timeline() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className={cn('font-bold text-sm truncate', allDone && 'line-through')}>{day.title}</p>
-                        {isToday && (
-                          <Badge className="text-[9px] px-1.5 py-0 bg-primary text-white border-0 uppercase tracking-wider">Today</Badge>
-                        )}
+                        {allDone ? (
+                          <Badge className="text-[9px] px-1.5 py-0 bg-emerald-500 text-white border-0 uppercase tracking-wider">Done</Badge>
+                        ) : isToday ? (
+                          <Badge className="text-[9px] px-1.5 py-0 bg-primary text-white border-0 uppercase tracking-wider flex items-center gap-1">
+                            <Circle className="h-2 w-2 fill-current animate-pulse" /> Ongoing
+                          </Badge>
+                        ) : phase === 'future' ? (
+                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 uppercase tracking-wider">Upcoming</Badge>
+                        ) : null}
                       </div>
                       <p className="text-xs text-muted-foreground">{day.date ? formatDayDate(day.date) : day.subtitle}</p>
                       {day.meals.length > 0 && (
