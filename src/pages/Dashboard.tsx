@@ -1,12 +1,15 @@
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import {
   Plane, Building2, Map, ListChecks, DollarSign,
   AlertCircle, Clock, CalendarDays, ChevronRight,
-  TrendingUp, CheckSquare, FileText, Globe
+  TrendingUp, CheckSquare, FileText, Globe, Circle, Check, MapPin
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import { getDaysUntil, formatDate, formatShortDate, getTripProgress, getTripStatus, formatTime } from '@/utils/dateUtils'
+import { sumExpenses } from '@/utils/currency'
+import { findInProgressActivity, findNextUpcomingActivity } from '@/utils/itinerary'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -22,8 +25,28 @@ const itemVariants = {
 }
 
 export default function Dashboard() {
-  const { trip } = useTrip()
+  const { trip, updateTrip } = useTrip()
   const navigate = useNavigate()
+
+  // Tick once a minute so the "Now" card and elapsed states stay fresh.
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  const inProgress = findInProgressActivity(trip.itinerary, now)
+  const nextUpcoming = inProgress ? null : findNextUpcomingActivity(trip.itinerary, now)
+
+  const markActivityDone = (dayId: string, actId: string) => {
+    updateTrip(prev => ({
+      ...prev,
+      itinerary: prev.itinerary.map(d => d.id !== dayId ? d : {
+        ...d,
+        activities: d.activities.map(a => a.id !== actId ? a : { ...a, done: true }),
+      }),
+    }))
+  }
 
   const { tripInfo, flights, hotels, checklist, expenses, settings } = trip
   const daysUntil = getDaysUntil(tripInfo.startDate)
@@ -33,7 +56,7 @@ export default function Dashboard() {
   const nextFlight = flights.find(f => f.status === 'upcoming') || flights[0]
   const checkedCount = checklist.filter(c => c.checked).length
   const totalBudget = settings.totalBudget
-  const spentAmount = expenses.reduce((s, e) => s + (e.currency === settings.homeCurrency ? e.amount : 0), 0)
+  const { total: spentAmount } = sumExpenses(trip.currencyRates, expenses, settings.homeCurrency)
   const budgetUsed = totalBudget > 0 ? Math.min((spentAmount / totalBudget) * 100, 100) : 0
 
   const quickActions = [
@@ -113,6 +136,79 @@ export default function Dashboard() {
           </div>
         </div>
       </motion.div>
+
+      {/* Now / Next Activity */}
+      {(inProgress || nextUpcoming) && (
+        <motion.div variants={itemVariants}>
+          {inProgress && (
+            <Card
+              className="mb-3 ring-2 ring-primary/40 shadow-md cursor-pointer active:scale-[0.99] transition-transform"
+              onClick={() => navigate('/timeline')}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Circle className="h-2 w-2 fill-primary text-primary animate-pulse" />
+                  <span className="text-xs font-bold text-primary uppercase tracking-widest">Happening Now</span>
+                  {inProgress.activity.time && (
+                    <span className="text-xs text-muted-foreground ml-auto font-mono">
+                      {formatTime(inProgress.activity.time)}
+                    </span>
+                  )}
+                </div>
+                <p className="font-bold text-base leading-tight">{inProgress.activity.title}</p>
+                {inProgress.activity.location && (
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                    <MapPin className="h-3 w-3" /> {inProgress.activity.location}
+                  </p>
+                )}
+                {inProgress.activity.description && (
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{inProgress.activity.description}</p>
+                )}
+                <div className="flex gap-2 mt-3">
+                  <Button
+                    size="sm"
+                    className="flex-1 h-8 text-xs"
+                    onClick={e => {
+                      e.stopPropagation()
+                      markActivityDone(inProgress.day.id, inProgress.activity.id)
+                    }}
+                  >
+                    <Check className="h-3.5 w-3.5 mr-1" /> Mark Done
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-8 text-xs" onClick={e => { e.stopPropagation(); navigate('/timeline') }}>
+                    View Timeline
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+          {nextUpcoming && (
+            <Card
+              className="mb-3 cursor-pointer active:scale-[0.99] transition-transform hover:shadow-md"
+              onClick={() => navigate('/timeline')}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className="h-3.5 w-3.5 text-emerald-500" />
+                  <span className="text-xs font-bold text-emerald-600 uppercase tracking-widest">Up Next</span>
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    {nextUpcoming.day.date === new Date().toISOString().split('T')[0]
+                      ? (nextUpcoming.activity.time ? formatTime(nextUpcoming.activity.time) : 'Today')
+                      : formatShortDate(nextUpcoming.day.date)
+                    }
+                  </span>
+                </div>
+                <p className="font-semibold text-sm leading-tight">{nextUpcoming.activity.title}</p>
+                {nextUpcoming.activity.location && (
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                    <MapPin className="h-3 w-3" /> {nextUpcoming.activity.location}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </motion.div>
+      )}
 
       {/* Next Flight */}
       {nextFlight && (

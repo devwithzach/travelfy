@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { getRate as sharedGetRate } from '@/utils/currency'
 
 const CURRENCIES = ['PHP', 'HKD', 'MOP', 'USD', 'EUR', 'SGD', 'JPY', 'CNY']
 
@@ -19,16 +20,7 @@ export default function Currency() {
 
   const rates = trip.currencyRates
 
-  const getRate = (from: string, to: string): number | null => {
-    if (from === to) return 1
-    const direct = rates.find(r => r.from === from && r.to === to)
-    if (direct) return direct.rate
-    const reverse = rates.find(r => r.from === to && r.to === from)
-    if (reverse) return 1 / reverse.rate
-    return null
-  }
-
-  const rate = getRate(fromCurrency, toCurrency)
+  const rate = sharedGetRate(rates, fromCurrency, toCurrency)
   const converted = rate !== null ? parseFloat(amount || '0') * rate : null
 
   const swap = () => {
@@ -147,7 +139,7 @@ export default function Currency() {
             </div>
             <div className="space-y-2">
               {commonConversions.map(({ from, to }) => {
-                const r = getRate(from, to)
+                const r = sharedGetRate(rates, from, to)
                 return (
                   <div key={`${from}-${to}`} className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/50">
                     <span className="text-sm font-semibold w-8">{from}</span>

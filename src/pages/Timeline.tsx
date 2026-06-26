@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatDayDate } from '@/utils/dateUtils'
 import { cn } from '@/utils/cn'
+import { localDateStr, isActivityDone as isActivityPastTime } from '@/utils/itinerary'
 
 const activityTypeConfig = {
   transport: { label: 'Transport', icon: Bus, color: 'text-blue-500 bg-blue-100 dark:bg-blue-900/30' },
@@ -28,27 +29,11 @@ const activityTypeConfig = {
   other: { label: 'Other', icon: MoreHorizontal, color: 'text-gray-500 bg-gray-100 dark:bg-gray-800' },
 }
 
-// Local YYYY-MM-DD for a given Date in the user's timezone.
-function localDateStr(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-// An activity is "done" if:
-//   - its date is strictly before today (whole day already past), or
-//   - its date is today and it has a time that has passed.
-// Activities on a future date are never done.
+// Wrapper: the local isActivityDone used to take (date, time, now). The shared
+// helper takes (date, time, manualDone, now). Keep the same shape here so the
+// rest of this file's auto-detect call sites stay terse.
 function isActivityDone(date: string, time: string, now: Date): boolean {
-  if (!date) return false
-  const today = localDateStr(now)
-  if (date < today) return true
-  if (date > today) return false
-  // same day — needs an explicit time that's already passed
-  if (!time) return false
-  const ts = new Date(`${date}T${time}`).getTime()
-  return !Number.isNaN(ts) && ts < now.getTime()
+  return isActivityPastTime(date, time, false, now)
 }
 
 function dayPhase(date: string, now: Date): 'past' | 'today' | 'future' | 'unknown' {

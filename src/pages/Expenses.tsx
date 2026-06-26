@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatDate } from '@/utils/dateUtils'
+import { sumExpenses, convert } from '@/utils/currency'
 
 const CATEGORY_CONFIG = {
   food: { label: 'Food & Dining', color: '#f59e0b' },
@@ -41,19 +42,23 @@ export default function Expenses() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)
 
-  const { expenses, settings } = trip
+  const { expenses, settings, currencyRates } = trip
   const totalBudget = settings.totalBudget
   const homeCurrency = settings.homeCurrency
 
-  const totalSpent = expenses.reduce((sum, e) => sum + (e.currency === homeCurrency ? e.amount : e.amount), 0)
+  const { total: totalSpent, unconvertedCount } = sumExpenses(currencyRates, expenses, homeCurrency)
   const budgetUsed = totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : 0
 
-  const categoryTotals = Object.keys(CATEGORY_CONFIG).map(cat => ({
-    name: CATEGORY_CONFIG[cat as keyof typeof CATEGORY_CONFIG].label,
-    value: expenses.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0),
-    color: CATEGORY_CONFIG[cat as keyof typeof CATEGORY_CONFIG].color,
-    key: cat,
-  })).filter(c => c.value > 0)
+  const categoryTotals = Object.keys(CATEGORY_CONFIG).map(cat => {
+    const items = expenses.filter(e => e.category === cat)
+    const { total } = sumExpenses(currencyRates, items, homeCurrency)
+    return {
+      name: CATEGORY_CONFIG[cat as keyof typeof CATEGORY_CONFIG].label,
+      value: total,
+      color: CATEGORY_CONFIG[cat as keyof typeof CATEGORY_CONFIG].color,
+      key: cat,
+    }
+  }).filter(c => c.value > 0)
 
   const openAdd = () => { setEditing({ ...defaultExpense(), currency: homeCurrency }); setDialogOpen(true) }
   const openEdit = (e: Expense) => { setEditing({ ...e }); setDialogOpen(true) }
@@ -120,6 +125,11 @@ export default function Expenses() {
                 </div>
               </>
             )}
+            {unconvertedCount > 0 && (
+              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                {unconvertedCount} expense{unconvertedCount === 1 ? '' : 's'} excluded — no exchange rate set. Add rates in the Currency tab.
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -138,7 +148,11 @@ export default function Expenses() {
               </div>
             ) : (
               <AnimatePresence>
-                {sortedExpenses.map((expense, i) => (
+                {sortedExpenses.map((expense, i) => {
+                  const convertedHome = expense.currency === homeCurrency
+                    ? null
+                    : convert(currencyRates, expense.amount, expense.currency, homeCurrency)
+                  return (
                   <motion.div
                     key={expense.id}
                     initial={{ opacity: 0, x: -16 }}
@@ -167,6 +181,14 @@ export default function Expenses() {
                           </div>
                           <div className="text-right shrink-0">
                             <p className="font-bold text-base">{expense.currency} {expense.amount.toLocaleString()}</p>
+                            {convertedHome !== null && (
+                              <p className="text-[10px] text-muted-foreground">
+                                ≈ {homeCurrency} {convertedHome.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                              </p>
+                            )}
+                            {expense.currency !== homeCurrency && convertedHome === null && (
+                              <p className="text-[10px] text-amber-600">no rate</p>
+                            )}
                             <div className="flex gap-1 mt-1">
                               <Button variant="ghost" size="icon-sm" className="h-6 w-6" onClick={() => openEdit(expense)}>
                                 <Edit2 className="h-3 w-3" />
@@ -180,7 +202,8 @@ export default function Expenses() {
                       </CardContent>
                     </Card>
                   </motion.div>
-                ))}
+                  )
+                })}
               </AnimatePresence>
             )}
           </TabsContent>
