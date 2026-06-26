@@ -9,6 +9,7 @@ import {
 import { useTrip } from '@/contexts/TripContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCurrentPlace } from '@/hooks/useCurrentPlace'
+import { countryFlag } from '@/components/map/geocode'
 import { getDaysUntil, formatDate, formatShortDate, getTripProgress, getTripStatus, formatTime } from '@/utils/dateUtils'
 import { sumExpenses } from '@/utils/currency'
 import { findInProgressActivity, findNextUpcomingActivity, localDateStr } from '@/utils/itinerary'
@@ -111,25 +112,49 @@ export default function Dashboard() {
       animate="visible"
       className="px-4 pb-4"
     >
-      {/* Personalized greeting + current location */}
+      {/* Personalized greeting + current location + local time */}
       <motion.div
         variants={itemVariants}
         className="pt-[max(2.5rem,env(safe-area-inset-top))] pb-2"
       >
-        <p className="text-xs text-muted-foreground uppercase tracking-widest">{greeting}</p>
-        <h1 className="text-2xl font-bold mt-0.5">{name} 👋</h1>
-        <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted-foreground uppercase tracking-widest">{greeting}</p>
+            <h1 className="text-2xl font-bold mt-0.5 truncate">{name} 👋</h1>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-2xl font-bold tabular-nums leading-none">
+              {now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+            </p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">
+              {now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 mt-2 text-xs">
           <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
           {place.loading ? (
-            <span className="opacity-60">Finding you…</span>
-          ) : place.label ? (
-            <span className="truncate">Currently in <span className="text-foreground font-medium">{place.label}</span></span>
+            <span className="text-muted-foreground opacity-60">Finding you…</span>
+          ) : place.country ? (
+            <span className="truncate">
+              <span className="text-muted-foreground">Currently in </span>
+              {place.region && (
+                <>
+                  <span className="text-foreground font-medium">{place.region}</span>
+                  <span className="text-muted-foreground">, </span>
+                </>
+              )}
+              <span className="text-foreground font-semibold">{place.country}</span>
+              {place.countryCode && (
+                <span className="ml-1" aria-hidden>{countryFlag(place.countryCode)}</span>
+              )}
+            </span>
           ) : place.permissionState === 'denied' ? (
-            <span className="opacity-60">Location off · enable in browser to see where you are</span>
+            <span className="text-muted-foreground opacity-60">Location off · enable in browser to see where you are</span>
           ) : place.permissionState === 'unsupported' ? (
-            <span className="opacity-60">Location unavailable on this device</span>
+            <span className="text-muted-foreground opacity-60">Location unavailable on this device</span>
           ) : (
-            <span className="opacity-60">Location unavailable</span>
+            <span className="text-muted-foreground opacity-60">Location unavailable</span>
           )}
         </div>
       </motion.div>

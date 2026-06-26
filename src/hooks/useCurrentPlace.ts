@@ -1,41 +1,44 @@
 import { useEffect, useState } from 'react'
-import { reverseGeocode } from '@/components/map/geocode'
+import { reverseGeocode, type ReverseGeocodeResult } from '@/components/map/geocode'
 
-interface State {
-  label: string | null
+interface State extends ReverseGeocodeResult {
   loading: boolean
   permissionState: 'unknown' | 'granted' | 'denied' | 'unsupported'
 }
+
+const EMPTY_PLACE: ReverseGeocodeResult = { label: null, region: null, country: null, countryCode: null }
 
 // Per-session cache so we don't re-prompt or re-fetch on every page mount.
 let cached: State | null = null
 
 /**
- * Resolve the user's current location to a short text label like
- * "Kowloon, Hong Kong" via GPS + Nominatim reverse geocode. Soft-fails:
- * returns null label on permission denied, no GPS, or network error.
+ * Resolve the user's current location to a structured place (region, country,
+ * country code for flag) via GPS + Nominatim reverse geocode. Soft-fails on
+ * permission denied / no GPS / network error — all fields become null.
  */
 export function useCurrentPlace(): State {
-  const [state, setState] = useState<State>(cached ?? { label: null, loading: true, permissionState: 'unknown' })
+  const [state, setState] = useState<State>(
+    cached ?? { ...EMPTY_PLACE, loading: true, permissionState: 'unknown' },
+  )
 
   useEffect(() => {
     if (cached) return
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      const next: State = { label: null, loading: false, permissionState: 'unsupported' }
+      const next: State = { ...EMPTY_PLACE, loading: false, permissionState: 'unsupported' }
       cached = next
       setState(next)
       return
     }
     navigator.geolocation.getCurrentPosition(
       async pos => {
-        const label = await reverseGeocode(pos.coords.latitude, pos.coords.longitude)
-        const next: State = { label, loading: false, permissionState: 'granted' }
+        const place = await reverseGeocode(pos.coords.latitude, pos.coords.longitude)
+        const next: State = { ...place, loading: false, permissionState: 'granted' }
         cached = next
         setState(next)
       },
       err => {
         const next: State = {
-          label: null,
+          ...EMPTY_PLACE,
           loading: false,
           permissionState: err.code === err.PERMISSION_DENIED ? 'denied' : 'unknown',
         }

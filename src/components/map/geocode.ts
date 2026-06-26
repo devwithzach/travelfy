@@ -74,11 +74,17 @@ export async function geocodeAddress(query: string): Promise<{ lat: number; lon:
 
 // ── Reverse geocoding ─────────────────────────────────────
 
-const REVERSE_CACHE_KEY = 'travelfy-reverse-geocode-cache-v1'
+const REVERSE_CACHE_KEY = 'travelfy-reverse-geocode-cache-v2'
 const REVERSE_TTL_MS = 1000 * 60 * 60 * 24 * 30 // 30 days
 
-interface ReverseEntry {
-  label: string | null
+export interface ReverseGeocodeResult {
+  label: string | null       // "Kowloon, Hong Kong"
+  region: string | null      // "Kowloon"
+  country: string | null     // "Hong Kong"
+  countryCode: string | null // ISO-3166-1 alpha-2, lowercased, e.g. "hk"
+}
+
+interface ReverseEntry extends ReverseGeocodeResult {
   ts: number
 }
 
@@ -95,38 +101,44 @@ function writeReverseCache(c: ReverseCache) {
   try { localStorage.setItem(REVERSE_CACHE_KEY, JSON.stringify(c)) } catch { /* noop */ }
 }
 
-const reverseInflight = new Map<string, Promise<string | null>>()
+const reverseInflight = new Map<string, Promise<ReverseGeocodeResult>>()
 
-// Reverse geocode lat/lon → a short human-readable place label like
-// "Kowloon, Hong Kong" or "Manila, Philippines". Cached 30 days.
-export async function reverseGeocode(lat: number, lon: number): Promise<string | null> {
+const EMPTY: ReverseGeocodeResult = { label: null, region: null, country: null, countryCode: null }
+
+// Reverse geocode lat/lon → structured place fields (region + country + ISO
+// country code for flag emoji). Cached 30 days.
+export async function reverseGeocode(lat: number, lon: number): Promise<ReverseGeocodeResult> {
   // Round to 3 decimals (~110m) so nearby calls share a cache entry.
   const key = `${lat.toFixed(3)},${lon.toFixed(3)}`
 
   const cache = readReverseCache()
   const hit = cache[key]
-  if (hit && Date.now() - hit.ts < REVERSE_TTL_MS) return hit.label
+  if (hit && Date.now() - hit.ts < REVERSE_TTL_MS) {
+    const { label, region, country, countryCode } = hit
+    return { label, region, country, countryCode }
+  }
 
   if (reverseInflight.has(key)) return reverseInflight.get(key)!
 
-  const promise = (async () => {
+  const promise = (async (): Promise<ReverseGeocodeResult> => {
     try {
       const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=12&accept-language=en`
       const res = await fetch(url, { headers: { 'Accept': 'application/json' } })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json() as { address?: Record<string, string>; display_name?: string }
       const a = data.address ?? {}
-      // Build a 2-part label: a smaller region + the country.
       const region =
         a.suburb || a.neighbourhood || a.city_district ||
-        a.city || a.town || a.village || a.county || a.state || ''
-      const country = a.country || ''
+        a.city || a.town || a.village || a.county || a.state || null
+      const country = a.country || null
+      const countryCode = a.country_code ? a.country_code.toLowerCase() : null
       const label = [region, country].filter(Boolean).join(', ') || data.display_name || null
-      cache[key] = { label, ts: Date.now() }
+      const result: ReverseGeocodeResult = { label, region, country, countryCode }
+      cache[key] = { ...result, ts: Date.now() }
       writeReverseCache(cache)
-      return label
+      return result
     } catch {
-      return null
+      return EMPTY
     } finally {
       reverseInflight.delete(key)
     }
@@ -134,4 +146,16 @@ export async function reverseGeocode(lat: number, lon: number): Promise<string |
 
   reverseInflight.set(key, promise)
   return promise
+}
+
+// ISO-3166-1 alpha-2 → flag emoji (regional indicator symbols).
+export function countryFlag(code: string | null | undefined): string {
+  if (!code || code.length !== 2) return ''
+  const A = 0x1F1E6 // Regional Indicator Symbol Letter A
+  const a = 'a'.charCodeAt(0)
+  const cc = code.toLowerCase()
+  return String.fromCodePoint(
+    A + (cc.charCodeAt(0) - a),
+    A + (cc.charCodeAt(1) - a),
+  )
 }
