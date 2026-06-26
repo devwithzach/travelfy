@@ -18,11 +18,14 @@ const buttonVariants = cva(
         glass: 'bg-white/10 backdrop-blur-sm border border-white/20 text-white hover:bg-white/20',
       },
       size: {
+        // All sizes get a `before` pseudo-element extending the tap area to
+        // 44×44 (Apple HIG / Material guideline) without affecting layout.
+        // Visual size stays the same; finger-touch area grows.
         default: 'h-10 px-4 py-2',
-        sm: 'h-8 rounded-lg px-3 text-xs',
+        sm: 'h-8 rounded-lg px-3 text-xs relative before:absolute before:inset-[-6px] before:content-[""]',
         lg: 'h-12 rounded-xl px-8 text-base',
         icon: 'h-10 w-10',
-        'icon-sm': 'h-8 w-8',
+        'icon-sm': 'h-9 w-9 relative before:absolute before:inset-[-4px] before:content-[""]',
       },
     },
     defaultVariants: {

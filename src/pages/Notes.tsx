@@ -72,8 +72,8 @@ export default function Notes() {
 
   if (isEditing && editBuffer) {
     return (
-      <div className="flex flex-col h-screen">
-        <div className="flex items-center px-4 pt-12 pb-3 gap-2 border-b">
+      <div className="flex flex-col min-h-[calc(100vh-6rem)] pb-24">
+        <div className="flex items-center px-4 pb-3 gap-2 border-b pt-[max(3rem,env(safe-area-inset-top))]">
           <Button variant="ghost" size="sm" className="text-xs" onClick={() => setIsEditing(false)}>
             ← Back
           </Button>

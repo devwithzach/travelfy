@@ -206,7 +206,7 @@ export default function Photos() {
   return (
     <div className="min-h-screen bg-background pb-28">
       {/* Header */}
-      <div className="px-4 pt-6 pb-4">
+      <div className="px-4 pb-4 pt-[max(1.5rem,env(safe-area-inset-top))]">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Trip Photos</h1>

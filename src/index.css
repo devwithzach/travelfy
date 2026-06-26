@@ -115,4 +115,14 @@
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom, 1rem);
   }
+
+  /* Top safe-area utility, parallels safe-bottom. Used on full-bleed page
+     headers (Trips, Photos lightbox). Defaults to 1rem on browsers without
+     env(). */
+  .pt-safe-top {
+    padding-top: max(1rem, env(safe-area-inset-top));
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0);
+  }
 }

@@ -23,7 +23,9 @@ export default function PageHeader({
     <motion.div
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={cn('px-4 pt-12 pb-4', className)}
+      // Top padding combines the iOS safe-area inset with a 3rem floor so the
+      // title isn't tucked under the status bar on notched devices.
+      className={cn('px-4 pb-4 pt-[max(3rem,env(safe-area-inset-top))]', className)}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
