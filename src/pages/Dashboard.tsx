@@ -7,6 +7,8 @@ import {
   TrendingUp, CheckSquare, FileText, Globe, Circle, Check, MapPin, Plus
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { useCurrentPlace } from '@/hooks/useCurrentPlace'
 import { getDaysUntil, formatDate, formatShortDate, getTripProgress, getTripStatus, formatTime } from '@/utils/dateUtils'
 import { sumExpenses } from '@/utils/currency'
 import { findInProgressActivity, findNextUpcomingActivity, localDateStr } from '@/utils/itinerary'
@@ -25,8 +27,29 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
 }
 
+// Friendly first name from a Supabase user record. Falls back to "Traveler".
+function deriveName(email: string | null | undefined, fullName: string | null | undefined): string {
+  if (fullName?.trim()) return fullName.split(/\s+/)[0]
+  if (!email) return 'Traveler'
+  const local = email.split('@')[0]
+  // Strip digits and split on common separators.
+  const first = local.replace(/\d+/g, '').split(/[._-]/)[0]
+  if (!first) return 'Traveler'
+  return first.charAt(0).toUpperCase() + first.slice(1)
+}
+
+function timeGreeting(d: Date): string {
+  const h = d.getHours()
+  if (h < 5) return 'Good evening'
+  if (h < 12) return 'Good morning'
+  if (h < 18) return 'Good afternoon'
+  return 'Good evening'
+}
+
 export default function Dashboard() {
   const { trip, updateTrip } = useTrip()
+  const { user } = useAuth()
+  const place = useCurrentPlace()
   const navigate = useNavigate()
 
   // Tick once a minute so the "Now" card and elapsed states stay fresh.
@@ -67,6 +90,9 @@ export default function Dashboard() {
 
   const [quickAddOpen, setQuickAddOpen] = useState(false)
 
+  const greeting = timeGreeting(now)
+  const name = deriveName(user?.email, (user?.user_metadata?.full_name as string | undefined) ?? null)
+
   const quickActions = [
     { label: 'Flights', icon: Plane, to: '/flights', color: 'bg-blue-500' },
     { label: 'Hotels', icon: Building2, to: '/hotels', color: 'bg-violet-500' },
@@ -85,8 +111,31 @@ export default function Dashboard() {
       animate="visible"
       className="px-4 pb-4"
     >
+      {/* Personalized greeting + current location */}
+      <motion.div
+        variants={itemVariants}
+        className="pt-[max(2.5rem,env(safe-area-inset-top))] pb-2"
+      >
+        <p className="text-xs text-muted-foreground uppercase tracking-widest">{greeting}</p>
+        <h1 className="text-2xl font-bold mt-0.5">{name} 👋</h1>
+        <div className="flex items-center gap-1.5 mt-1.5 text-xs text-muted-foreground">
+          <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+          {place.loading ? (
+            <span className="opacity-60">Finding you…</span>
+          ) : place.label ? (
+            <span className="truncate">Currently in <span className="text-foreground font-medium">{place.label}</span></span>
+          ) : place.permissionState === 'denied' ? (
+            <span className="opacity-60">Location off · enable in browser to see where you are</span>
+          ) : place.permissionState === 'unsupported' ? (
+            <span className="opacity-60">Location unavailable on this device</span>
+          ) : (
+            <span className="opacity-60">Location unavailable</span>
+          )}
+        </div>
+      </motion.div>
+
       {/* Hero Card */}
-      <motion.div variants={itemVariants} className="pt-10 pb-4">
+      <motion.div variants={itemVariants} className="pb-4">
         <div className="relative overflow-hidden rounded-3xl gradient-hero p-6 text-white shadow-xl shadow-primary/20">
           <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-12 translate-x-12" />
           <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-10 -translate-x-8" />
