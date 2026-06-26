@@ -43,6 +43,7 @@ export interface ItineraryActivity {
   description: string
   type: 'transport' | 'attraction' | 'meal' | 'hotel' | 'shopping' | 'free' | 'other'
   location?: string
+  done?: boolean
 }
 
 export interface ItineraryDay {

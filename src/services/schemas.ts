@@ -55,6 +55,7 @@ export const activityRowSchema = z.object({
   description: str(),
   type: z.enum(['transport', 'attraction', 'meal', 'hotel', 'shopping', 'free', 'other']).catch('other'),
   location: str(),
+  done: bool(),
 })
 
 export const dayRowSchema = z.object({

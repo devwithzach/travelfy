@@ -41,7 +41,7 @@ function mapActivity(r: unknown): ItineraryActivity {
   const v = activityRowSchema.parse(r)
   return {
     id: v.id, time: v.time, title: v.title, description: v.description,
-    type: v.type, location: v.location,
+    type: v.type, location: v.location, done: v.done,
   }
 }
 
@@ -422,6 +422,7 @@ export const storageService = {
               id: a.id, day_id: d.id, user_id: userId,
               time: a.time, title: a.title, description: a.description,
               type: a.type, location: a.location || '', sort_order: i,
+              done: a.done ?? false,
             }))
           )
           if (allActivities.length > 0) {

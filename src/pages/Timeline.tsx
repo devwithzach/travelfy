@@ -59,28 +59,24 @@ function dayPhase(date: string, now: Date): 'past' | 'today' | 'future' | 'unkno
   return 'future'
 }
 
-// localStorage helpers for manual done toggles, keyed by trip id.
-function doneStorageKey(tripId: string): string {
-  return `travelfy-done-${tripId}`
-}
+// Legacy localStorage shim: prior versions stored manual done state per-device.
+// On first load with the new DB-backed schema we migrate those entries into the
+// trip via updateTrip, then drop the key so it can't drift.
+const DONE_STORAGE_PREFIX = 'travelfy-done-'
 
-function loadDoneSet(tripId: string): Set<string> {
+function readLegacyDoneIds(tripId: string): string[] {
   try {
-    const raw = localStorage.getItem(doneStorageKey(tripId))
-    if (!raw) return new Set()
+    const raw = localStorage.getItem(DONE_STORAGE_PREFIX + tripId)
+    if (!raw) return []
     const arr = JSON.parse(raw) as unknown
-    return Array.isArray(arr) ? new Set(arr.filter((x): x is string => typeof x === 'string')) : new Set()
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : []
   } catch {
-    return new Set()
+    return []
   }
 }
 
-function saveDoneSet(tripId: string, set: Set<string>) {
-  try {
-    localStorage.setItem(doneStorageKey(tripId), JSON.stringify([...set]))
-  } catch {
-    // quota exceeded — ignore
-  }
+function clearLegacyDone(tripId: string) {
+  try { localStorage.removeItem(DONE_STORAGE_PREFIX + tripId) } catch { /* noop */ }
 }
 
 const defaultActivity = (): ItineraryActivity => ({
@@ -119,21 +115,40 @@ export default function Timeline() {
     return () => clearInterval(id)
   }, [])
 
-  // Manual done toggles, persisted per trip.
-  const [manualDone, setManualDone] = useState<Set<string>>(() => loadDoneSet(tripId))
-  useEffect(() => { setManualDone(loadDoneSet(tripId)) }, [tripId])
-
-  const toggleManualDone = (activityId: string) => {
-    setManualDone(prev => {
-      const next = new Set(prev)
-      next.has(activityId) ? next.delete(activityId) : next.add(activityId)
-      saveDoneSet(tripId, next)
-      return next
-    })
+  // Manual done lives on the activity row itself (synced via Supabase).
+  const toggleManualDone = (dayId: string, actId: string) => {
+    updateTrip(prev => ({
+      ...prev,
+      itinerary: prev.itinerary.map(d => {
+        if (d.id !== dayId) return d
+        return {
+          ...d,
+          activities: d.activities.map(a => a.id === actId ? { ...a, done: !a.done } : a),
+        }
+      }),
+    }))
   }
 
+  // One-time migration: lift any legacy per-device done IDs into the trip row.
+  useEffect(() => {
+    const legacy = readLegacyDoneIds(tripId)
+    if (legacy.length === 0) return
+    const legacySet = new Set(legacy)
+    updateTrip(prev => ({
+      ...prev,
+      itinerary: prev.itinerary.map(d => ({
+        ...d,
+        activities: d.activities.map(a =>
+          legacySet.has(a.id) && !a.done ? { ...a, done: true } : a
+        ),
+      })),
+    }))
+    clearLegacyDone(tripId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tripId])
+
   const isDone = (act: ItineraryActivity, dayDate: string) =>
-    manualDone.has(act.id) || isActivityDone(dayDate, act.time, now)
+    !!act.done || isActivityDone(dayDate, act.time, now)
 
   // Find the single activity that's currently "in progress":
   // today's last activity whose time has passed (or first activity if none yet).
@@ -145,13 +160,13 @@ export default function Timeline() {
     const sorted = [...todayDay.activities].sort((a, b) => a.time.localeCompare(b.time))
     let candidate: ItineraryActivity | null = null
     for (const a of sorted) {
-      if (manualDone.has(a.id)) continue
+      if (a.done) continue
       if (!a.time) { candidate = candidate ?? a; continue }
       const ts = new Date(`${today}T${a.time}`).getTime()
       if (!Number.isNaN(ts) && ts <= nowMs) candidate = a
     }
     return candidate?.id ?? null
-  }, [trip.itinerary, now, manualDone])
+  }, [trip.itinerary, now])
 
   // Sticky "Jump to today" — only show if today's day card exists and is scrolled past viewport.
   const todayCardRef = useRef<HTMLDivElement | null>(null)
@@ -353,7 +368,7 @@ export default function Timeline() {
                             const cfg = activityTypeConfig[act.type]
                             const Icon = cfg.icon
                             const done = isDone(act, day.date)
-                            const manualOnly = manualDone.has(act.id) && !isActivityDone(day.date, act.time, now)
+                            const manualOnly = !!act.done && !isActivityDone(day.date, act.time, now)
                             const inProgress = !done && act.id === inProgressId
                             return (
                               <div key={act.id} className={cn(
@@ -362,7 +377,7 @@ export default function Timeline() {
                                 inProgress && 'bg-primary/5 ring-1 ring-primary/30 py-1.5'
                               )}>
                                 <button
-                                  onClick={() => toggleManualDone(act.id)}
+                                  onClick={() => toggleManualDone(day.id, act.id)}
                                   aria-label={done ? 'Mark as not done' : 'Mark as done'}
                                   title={done ? (manualOnly ? 'Manually marked done — tap to undo' : 'Auto-detected as past — tap to override') : 'Tap to mark done'}
                                   className="flex flex-col items-center shrink-0 group focus:outline-none"
