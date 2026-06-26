@@ -4,6 +4,7 @@ import { Plane, X } from 'lucide-react'
 import BottomNav from './BottomNav'
 import ReminderBanner from '@/components/common/ReminderBanner'
 import { useTrip } from '@/contexts/TripContext'
+import { useFlightStatusSync } from '@/hooks/useFlightStatusSync'
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
@@ -14,6 +15,7 @@ const pageVariants = {
 export default function MainLayout() {
   const location = useLocation()
   const { activeTripId, loading, error, clearError } = useTrip()
+  useFlightStatusSync()
 
   if (loading) {
     return (
