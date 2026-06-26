@@ -28,14 +28,35 @@ const activityTypeConfig = {
   other: { label: 'Other', icon: MoreHorizontal, color: 'text-gray-500 bg-gray-100 dark:bg-gray-800' },
 }
 
-// An activity is "done" if its date + time is in the past.
-// If the activity has no time, fall back to end-of-day for that date.
+// Local YYYY-MM-DD for a given Date in the user's timezone.
+function localDateStr(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// An activity is "done" if:
+//   - its date is strictly before today (whole day already past), or
+//   - its date is today and it has a time that has passed.
+// Activities on a future date are never done.
 function isActivityDone(date: string, time: string, now: Date): boolean {
   if (!date) return false
-  const dateStr = time ? `${date}T${time}` : `${date}T23:59`
-  const ts = new Date(dateStr).getTime()
-  if (Number.isNaN(ts)) return false
-  return ts < now.getTime()
+  const today = localDateStr(now)
+  if (date < today) return true
+  if (date > today) return false
+  // same day — needs an explicit time that's already passed
+  if (!time) return false
+  const ts = new Date(`${date}T${time}`).getTime()
+  return !Number.isNaN(ts) && ts < now.getTime()
+}
+
+function dayPhase(date: string, now: Date): 'past' | 'today' | 'future' | 'unknown' {
+  if (!date) return 'unknown'
+  const today = localDateStr(now)
+  if (date < today) return 'past'
+  if (date === today) return 'today'
+  return 'future'
 }
 
 const defaultActivity = (): ItineraryActivity => ({
@@ -162,9 +183,12 @@ export default function Timeline() {
         <AnimatePresence>
           {trip.itinerary.map((day, i) => {
             const isExpanded = expandedDays.has(day.id)
+            const phase = dayPhase(day.date, now)
             const doneCount = day.activities.filter(a => isActivityDone(day.date, a.time, now)).length
             const total = day.activities.length
-            const allDone = total > 0 && doneCount === total
+            // A day with date in the past counts as fully done even if it has zero activities.
+            const allDone = phase === 'past' || (total > 0 && doneCount === total)
+            const isToday = phase === 'today'
             return (
               <motion.div
                 key={day.id}
@@ -173,7 +197,11 @@ export default function Timeline() {
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ delay: i * 0.05 }}
               >
-                <Card className={cn('overflow-hidden', allDone && 'opacity-70')}>
+                <Card className={cn(
+                  'overflow-hidden',
+                  allDone && 'opacity-70',
+                  isToday && 'ring-2 ring-primary/40 shadow-md'
+                )}>
                   {/* Day Header */}
                   <div
                     className="flex items-center p-4 cursor-pointer select-none"
@@ -181,12 +209,17 @@ export default function Timeline() {
                   >
                     <div className={cn(
                       'w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold mr-3 shrink-0',
-                      allDone ? 'bg-emerald-500' : 'gradient-brand'
+                      allDone ? 'bg-emerald-500' : isToday ? 'bg-primary animate-pulse' : 'gradient-brand'
                     )}>
                       {allDone ? <Check className="h-5 w-5" strokeWidth={3} /> : day.dayNumber}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={cn('font-bold text-sm truncate', allDone && 'line-through')}>{day.title}</p>
+                      <div className="flex items-center gap-2">
+                        <p className={cn('font-bold text-sm truncate', allDone && 'line-through')}>{day.title}</p>
+                        {isToday && (
+                          <Badge className="text-[9px] px-1.5 py-0 bg-primary text-white border-0 uppercase tracking-wider">Today</Badge>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground">{day.date ? formatDayDate(day.date) : day.subtitle}</p>
                       {day.meals.length > 0 && (
                         <div className="flex gap-1 mt-1">
