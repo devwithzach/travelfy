@@ -11,21 +11,37 @@ export function localDateStr(d: Date): string {
 // An activity counts as done if:
 //   - it's manually flagged done, or
 //   - its date is strictly before today (whole day past), or
-//   - its date is today and its time has already passed.
+//   - its date is today and its own start time has passed, or
+//   - any later same-day activity has already started (so this one must be over).
 // Future-dated activities are never done.
-export function isActivityDone(date: string, time: string, manualDone: boolean, now: Date): boolean {
+export function isActivityDone(
+  date: string,
+  time: string,
+  manualDone: boolean,
+  now: Date,
+  laterTodayStartTimes: string[] = [],
+): boolean {
   if (manualDone) return true
   if (!date) return false
   const today = localDateStr(now)
   if (date < today) return true
   if (date > today) return false
-  if (!time) return false
-  const ts = new Date(`${date}T${time}`).getTime()
-  return !Number.isNaN(ts) && ts < now.getTime()
+  const nowMs = now.getTime()
+  if (time) {
+    const ts = new Date(`${date}T${time}`).getTime()
+    if (!Number.isNaN(ts) && ts < nowMs) return true
+  }
+  // No own start time or it hasn't passed — fall back to "next activity already started".
+  for (const t of laterTodayStartTimes) {
+    if (!t) continue
+    const ts = new Date(`${date}T${t}`).getTime()
+    if (!Number.isNaN(ts) && ts <= nowMs) return true
+  }
+  return false
 }
 
-// Find the currently in-progress activity: among today's undone activities,
-// the one whose time most recently passed (or the first untimed one).
+// Find the currently in-progress activity: today's most-recently-started undone
+// activity. Anything older than that is treated as over (since a later one began).
 export function findInProgressActivity(
   itinerary: ItineraryDay[],
   now: Date,
@@ -35,14 +51,15 @@ export function findInProgressActivity(
   if (!todayDay || todayDay.activities.length === 0) return null
   const nowMs = now.getTime()
   const sorted = [...todayDay.activities].sort((a, b) => a.time.localeCompare(b.time))
-  let candidate: ItineraryActivity | null = null
+  // Find the activity whose start time most recently passed and isn't manually done.
+  let lastStarted: ItineraryActivity | null = null
   for (const a of sorted) {
-    if (a.done) continue
-    if (!a.time) { candidate = candidate ?? a; continue }
+    if (!a.time) { lastStarted = lastStarted ?? a; continue }
     const ts = new Date(`${today}T${a.time}`).getTime()
-    if (!Number.isNaN(ts) && ts <= nowMs) candidate = a
+    if (!Number.isNaN(ts) && ts <= nowMs) lastStarted = a
   }
-  return candidate ? { day: todayDay, activity: candidate } : null
+  if (!lastStarted || lastStarted.done) return null
+  return { day: todayDay, activity: lastStarted }
 }
 
 // First undone activity in chronological order (date, then time).

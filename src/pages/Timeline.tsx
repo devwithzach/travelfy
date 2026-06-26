@@ -29,11 +29,14 @@ const activityTypeConfig = {
   other: { label: 'Other', icon: MoreHorizontal, color: 'text-gray-500 bg-gray-100 dark:bg-gray-800' },
 }
 
-// Wrapper: the local isActivityDone used to take (date, time, now). The shared
-// helper takes (date, time, manualDone, now). Keep the same shape here so the
-// rest of this file's auto-detect call sites stay terse.
-function isActivityDone(date: string, time: string, now: Date): boolean {
-  return isActivityPastTime(date, time, false, now)
+// Auto-detect wrapper (no manual flag). Takes the day's full activity list so
+// the helper can apply the "next activity already started → previous one is over"
+// rule. Without this an undated/single-time activity stays "ongoing" forever.
+function autoIsActivityDone(act: ItineraryActivity, day: ItineraryDay, now: Date): boolean {
+  const later = day.activities
+    .filter(a => a.id !== act.id && a.time && a.time > (act.time || ''))
+    .map(a => a.time)
+  return isActivityPastTime(day.date, act.time, false, now, later)
 }
 
 function dayPhase(date: string, now: Date): 'past' | 'today' | 'future' | 'unknown' {
@@ -114,6 +117,19 @@ export default function Timeline() {
     }))
   }
 
+  // Flip every activity in a day to done (or all back to undone).
+  const markDayDone = (day: ItineraryDay, done: boolean) => {
+    updateTrip(prev => ({
+      ...prev,
+      itinerary: prev.itinerary.map(d =>
+        d.id !== day.id ? d : {
+          ...d,
+          activities: d.activities.map(a => ({ ...a, done })),
+        }
+      ),
+    }))
+  }
+
   // One-time migration: lift any legacy per-device done IDs into the trip row.
   useEffect(() => {
     const legacy = readLegacyDoneIds(tripId)
@@ -132,8 +148,8 @@ export default function Timeline() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tripId])
 
-  const isDone = (act: ItineraryActivity, dayDate: string) =>
-    !!act.done || isActivityDone(dayDate, act.time, now)
+  const isDone = (act: ItineraryActivity, day: ItineraryDay) =>
+    !!act.done || autoIsActivityDone(act, day, now)
 
   // Find the single activity that's currently "in progress":
   // today's last activity whose time has passed (or first activity if none yet).
@@ -251,7 +267,7 @@ export default function Timeline() {
     (acc, d) => {
       const phase = dayPhase(d.date, now)
       const total = d.activities.length
-      const allDone = phase === 'past' || (total > 0 && d.activities.every(a => isDone(a, d.date)))
+      const allDone = phase === 'past' || (total > 0 && d.activities.every(a => isDone(a, d)))
       if (allDone) acc.done++
       else if (phase === 'today') acc.ongoing++
       else if (phase === 'future') acc.upcoming++
@@ -285,7 +301,7 @@ export default function Timeline() {
           {trip.itinerary.map((day, i) => {
             const isExpanded = expandedDays.has(day.id)
             const phase = dayPhase(day.date, now)
-            const doneCount = day.activities.filter(a => isDone(a, day.date)).length
+            const doneCount = day.activities.filter(a => isDone(a, day)).length
             const total = day.activities.length
             // A day with date in the past counts as fully done even if it has zero activities.
             const allDone = phase === 'past' || (total > 0 && doneCount === total)
@@ -344,6 +360,18 @@ export default function Timeline() {
                       )}>
                         {total > 0 ? `${doneCount}/${total}` : '0'}
                       </span>
+                      {total > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={e => { e.stopPropagation(); markDayDone(day, !allDone) }}
+                          className="h-7 w-7"
+                          aria-label={allDone ? 'Reopen day' : 'Mark all activities done'}
+                          title={allDone ? 'Reopen day' : 'Mark all activities done'}
+                        >
+                          <Check className={cn('h-3.5 w-3.5', allDone ? 'text-emerald-600' : 'text-muted-foreground')} strokeWidth={3} />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon-sm"
@@ -378,8 +406,8 @@ export default function Timeline() {
                           {day.activities.map((act, ai) => {
                             const cfg = activityTypeConfig[act.type]
                             const Icon = cfg.icon
-                            const done = isDone(act, day.date)
-                            const manualOnly = !!act.done && !isActivityDone(day.date, act.time, now)
+                            const done = isDone(act, day)
+                            const manualOnly = !!act.done && !autoIsActivityDone(act, day, now)
                             const inProgress = !done && act.id === inProgressId
                             return (
                               <div key={act.id} className={cn(
