@@ -2,6 +2,7 @@ import { Outlet, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Plane, X } from 'lucide-react'
 import BottomNav from './BottomNav'
+import ReminderBanner from '@/components/common/ReminderBanner'
 import { useTrip } from '@/contexts/TripContext'
 
 const pageVariants = {
@@ -63,6 +64,7 @@ export default function MainLayout() {
           </motion.div>
         </AnimatePresence>
       </main>
+      <ReminderBanner />
       <BottomNav />
     </div>
   )

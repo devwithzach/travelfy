@@ -4,12 +4,13 @@ import { useNavigate } from 'react-router-dom'
 import {
   Plane, Building2, Map, ListChecks, DollarSign,
   AlertCircle, Clock, CalendarDays, ChevronRight,
-  TrendingUp, CheckSquare, FileText, Globe, Circle, Check, MapPin
+  TrendingUp, CheckSquare, FileText, Globe, Circle, Check, MapPin, Plus
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import { getDaysUntil, formatDate, formatShortDate, getTripProgress, getTripStatus, formatTime } from '@/utils/dateUtils'
 import { sumExpenses } from '@/utils/currency'
-import { findInProgressActivity, findNextUpcomingActivity } from '@/utils/itinerary'
+import { findInProgressActivity, findNextUpcomingActivity, localDateStr } from '@/utils/itinerary'
+import QuickAddExpense from '@/components/common/QuickAddExpense'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -58,6 +59,13 @@ export default function Dashboard() {
   const totalBudget = settings.totalBudget
   const { total: spentAmount } = sumExpenses(trip.currencyRates, expenses, settings.homeCurrency)
   const budgetUsed = totalBudget > 0 ? Math.min((spentAmount / totalBudget) * 100, 100) : 0
+
+  // Today's spend, converted to home currency.
+  const todayStr = localDateStr(now)
+  const todayExpenses = expenses.filter(e => e.date === todayStr)
+  const { total: todaySpent } = sumExpenses(trip.currencyRates, todayExpenses, settings.homeCurrency)
+
+  const [quickAddOpen, setQuickAddOpen] = useState(false)
 
   const quickActions = [
     { label: 'Flights', icon: Plane, to: '/flights', color: 'bg-blue-500' },
@@ -257,20 +265,22 @@ export default function Dashboard() {
 
       {/* Stats Row */}
       <motion.div variants={itemVariants} className="grid grid-cols-3 gap-3 mb-3">
+        <Card className="text-center p-4 hover:shadow-md transition-shadow cursor-pointer active:scale-[0.98]" onClick={() => navigate('/expenses')}>
+          <div className="text-xl font-bold text-rose-600 leading-tight">
+            {settings.homeCurrency} {todaySpent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </div>
+          <div className="text-xs text-muted-foreground mt-0.5">Today</div>
+          <DollarSign className="h-4 w-4 text-rose-400 mx-auto mt-1" />
+        </Card>
         <Card className="text-center p-4 hover:shadow-md transition-shadow cursor-pointer active:scale-[0.98]" onClick={() => navigate('/checklist')}>
           <div className="text-2xl font-bold text-primary">{checkedCount}/{checklist.length}</div>
           <div className="text-xs text-muted-foreground mt-0.5">Packed</div>
           <CheckSquare className="h-4 w-4 text-primary/40 mx-auto mt-1" />
         </Card>
-        <Card className="text-center p-4 hover:shadow-md transition-shadow cursor-pointer active:scale-[0.98]" onClick={() => navigate('/hotels')}>
-          <div className="text-2xl font-bold text-violet-600">{hotels.length}</div>
-          <div className="text-xs text-muted-foreground mt-0.5">Hotels</div>
-          <Building2 className="h-4 w-4 text-violet-400 mx-auto mt-1" />
-        </Card>
         <Card className="text-center p-4 hover:shadow-md transition-shadow cursor-pointer active:scale-[0.98]" onClick={() => navigate('/expenses')}>
-          <div className="text-2xl font-bold text-rose-600">{Math.round(budgetUsed)}%</div>
+          <div className="text-2xl font-bold text-amber-600">{Math.round(budgetUsed)}%</div>
           <div className="text-xs text-muted-foreground mt-0.5">Budget</div>
-          <TrendingUp className="h-4 w-4 text-rose-400 mx-auto mt-1" />
+          <TrendingUp className="h-4 w-4 text-amber-400 mx-auto mt-1" />
         </Card>
       </motion.div>
 
@@ -371,6 +381,20 @@ export default function Dashboard() {
           </Card>
         </motion.div>
       )}
+
+      {/* Floating "Quick Add Expense" FAB */}
+      <motion.button
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        whileTap={{ scale: 0.92 }}
+        onClick={() => setQuickAddOpen(true)}
+        aria-label="Quick add expense"
+        className="fixed bottom-24 right-4 z-[1700] w-14 h-14 rounded-full bg-rose-500 text-white shadow-xl shadow-rose-500/40 flex items-center justify-center active:shadow-lg"
+      >
+        <Plus className="h-6 w-6" strokeWidth={2.5} />
+      </motion.button>
+
+      <QuickAddExpense open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
     </motion.div>
   )
 }

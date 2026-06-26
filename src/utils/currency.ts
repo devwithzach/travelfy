@@ -1,5 +1,38 @@
 import type { CurrencyRate } from '@/types'
 
+// Best-guess local currency for a free-text destination string. Falls back to
+// homeCurrency when nothing matches. Comparison is substring-based and
+// case-insensitive so "Tokyo, Japan" → JPY, "Hong Kong–Macau" → HKD (first hit).
+const DESTINATION_HINTS: Array<{ match: RegExp; currency: string }> = [
+  { match: /hong\s*kong|hk\b/i, currency: 'HKD' },
+  { match: /macau|macao/i, currency: 'MOP' },
+  { match: /japan|tokyo|kyoto|osaka/i, currency: 'JPY' },
+  { match: /singapore|sg\b/i, currency: 'SGD' },
+  { match: /thailand|bangkok|phuket/i, currency: 'THB' },
+  { match: /korea|seoul|busan/i, currency: 'KRW' },
+  { match: /china|beijing|shanghai|shenzhen/i, currency: 'CNY' },
+  { match: /taiwan|taipei/i, currency: 'TWD' },
+  { match: /vietnam|hanoi|ho\s*chi\s*minh|saigon/i, currency: 'VND' },
+  { match: /malaysia|kuala\s*lumpur/i, currency: 'MYR' },
+  { match: /indonesia|bali|jakarta/i, currency: 'IDR' },
+  { match: /philippines|manila|cebu/i, currency: 'PHP' },
+  { match: /australia|sydney|melbourne/i, currency: 'AUD' },
+  { match: /new\s*zealand|auckland|wellington/i, currency: 'NZD' },
+  { match: /united\s*kingdom|uk\b|london|england/i, currency: 'GBP' },
+  { match: /usa\b|united\s*states|new\s*york|los\s*angeles|chicago/i, currency: 'USD' },
+  { match: /canada|toronto|vancouver/i, currency: 'CAD' },
+  { match: /europe|france|paris|germany|berlin|spain|madrid|italy|rome/i, currency: 'EUR' },
+  { match: /switzerland|zurich|geneva/i, currency: 'CHF' },
+  { match: /uae|dubai|abu\s*dhabi/i, currency: 'AED' },
+]
+
+export function guessLocalCurrency(destination: string, fallback: string): string {
+  for (const { match, currency } of DESTINATION_HINTS) {
+    if (match.test(destination)) return currency
+  }
+  return fallback
+}
+
 // Return the exchange rate from→to, or null if neither a direct nor inverse
 // rate exists. A two-hop pivot through any common currency (typically USD) is
 // also tried so that PHP→JPY works when only PHP↔USD and USD↔JPY are stored.

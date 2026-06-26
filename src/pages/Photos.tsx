@@ -5,8 +5,12 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useTrip } from '@/contexts/TripContext'
 import {
   Camera, Plus, X, Trash2, MapPin, Tag, ChevronLeft,
-  ChevronRight, Loader2, Image, Download, ZoomIn
+  ChevronRight, Loader2, Image, Download
 } from 'lucide-react'
+import { compressImage } from '@/utils/image'
+
+const MAX_RAW_BYTES = 25 * 1024 * 1024 // 25MB before compression
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/webp', 'image/gif']
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -33,6 +37,7 @@ export default function Photos() {
   const [photos, setPhotos] = useState<TripPhoto[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const [showUploadSheet, setShowUploadSheet] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
 
@@ -70,11 +75,24 @@ export default function Photos() {
   // File selected
   const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
+
+    setUploadError(null)
+    if (file.size > MAX_RAW_BYTES) {
+      setUploadError(`Photo too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 25MB.`)
+      return
+    }
+    // Some iOS HEIC/HEIF files report empty type — accept those too and let the
+    // browser/Supabase reject if it really can't handle them.
+    if (file.type && !ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setUploadError('Only JPEG, PNG, HEIC, WebP, or GIF allowed.')
+      return
+    }
+
     setPendingFile(file)
     setPendingPreview(URL.createObjectURL(file))
     setShowUploadSheet(true)
-    e.target.value = ''
 
     // Auto-GPS
     setGpsLoading(true)
@@ -124,15 +142,19 @@ export default function Photos() {
   const uploadPhoto = async () => {
     if (!pendingFile || !user) return
     setUploading(true)
+    setUploadError(null)
 
     try {
-      const ext = pendingFile.name.split('.').pop() || 'jpg'
+      // Compress before upload — cuts iPhone photos from ~5MB to ~500KB,
+      // huge win on cellular abroad.
+      const fileToUpload = await compressImage(pendingFile, { maxDimension: 2048, quality: 0.85 })
+      const ext = fileToUpload.name.split('.').pop() || 'jpg'
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
       const path = `${user.id}/${id}.${ext}`
 
       const { error: uploadErr } = await supabase.storage
         .from('trip-photos')
-        .upload(path, pendingFile, { contentType: pendingFile.type, upsert: false })
+        .upload(path, fileToUpload, { contentType: fileToUpload.type, upsert: false })
 
       if (uploadErr) throw uploadErr
 
@@ -162,8 +184,9 @@ export default function Photos() {
 
       await loadPhotos()
       cancelUpload()
-    } catch (err: any) {
-      alert('Upload failed: ' + (err.message || 'Unknown error'))
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      setUploadError(`Upload failed: ${msg}`)
     } finally {
       setUploading(false)
     }
@@ -207,6 +230,16 @@ export default function Photos() {
         className="hidden"
         onChange={onFileSelected}
       />
+
+      {/* Top-level error banner (e.g., oversized photo before opening the sheet) */}
+      {uploadError && !showUploadSheet && (
+        <div className="mx-4 mb-3 px-3 py-2 rounded-xl bg-destructive/10 text-destructive text-xs flex items-center gap-2" role="alert">
+          <span className="flex-1">{uploadError}</span>
+          <button onClick={() => setUploadError(null)} aria-label="Dismiss">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Loading */}
       {loading && (
@@ -390,12 +423,15 @@ export default function Photos() {
                 </div>
 
                 {/* Upload Button */}
+                {uploadError && (
+                  <p className="text-xs text-destructive text-center" role="alert">{uploadError}</p>
+                )}
                 <button
                   onClick={uploadPhoto}
                   disabled={uploading}
                   className="w-full py-4 rounded-2xl gradient-brand text-white font-bold text-sm shadow-lg flex items-center justify-center gap-2 disabled:opacity-60"
                 >
-                  {uploading ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading...</> : <><Image className="h-4 w-4" /> Save Photo</>}
+                  {uploading ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading…</> : <><Image className="h-4 w-4" /> Save Photo</>}
                 </button>
               </div>
             </motion.div>
