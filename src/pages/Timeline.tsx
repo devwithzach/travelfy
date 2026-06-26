@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Map, Plus, Edit2, Trash2, ChevronDown, ChevronUp,
-  Utensils, Bus, Landmark, Hotel, ShoppingBag, Clock, Star, MoreHorizontal, Check
+  Utensils, Bus, Landmark, Hotel, ShoppingBag, Clock, Star, MoreHorizontal, Check, Circle, ArrowDownToLine
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import type { ItineraryDay, ItineraryActivity } from '@/types'
@@ -59,6 +59,30 @@ function dayPhase(date: string, now: Date): 'past' | 'today' | 'future' | 'unkno
   return 'future'
 }
 
+// localStorage helpers for manual done toggles, keyed by trip id.
+function doneStorageKey(tripId: string): string {
+  return `travelfy-done-${tripId}`
+}
+
+function loadDoneSet(tripId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(doneStorageKey(tripId))
+    if (!raw) return new Set()
+    const arr = JSON.parse(raw) as unknown
+    return Array.isArray(arr) ? new Set(arr.filter((x): x is string => typeof x === 'string')) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function saveDoneSet(tripId: string, set: Set<string>) {
+  try {
+    localStorage.setItem(doneStorageKey(tripId), JSON.stringify([...set]))
+  } catch {
+    // quota exceeded — ignore
+  }
+}
+
 const defaultActivity = (): ItineraryActivity => ({
   id: crypto.randomUUID(),
   time: '',
@@ -81,6 +105,7 @@ const defaultDay = (): ItineraryDay => ({
 
 export default function Timeline() {
   const { trip, updateTrip } = useTrip()
+  const tripId = trip.tripInfo.id
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set(trip.itinerary.map(d => d.id)))
   const [dayDialogOpen, setDayDialogOpen] = useState(false)
   const [actDialogOpen, setActDialogOpen] = useState(false)
@@ -93,6 +118,62 @@ export default function Timeline() {
     const id = setInterval(() => setNow(new Date()), 60_000)
     return () => clearInterval(id)
   }, [])
+
+  // Manual done toggles, persisted per trip.
+  const [manualDone, setManualDone] = useState<Set<string>>(() => loadDoneSet(tripId))
+  useEffect(() => { setManualDone(loadDoneSet(tripId)) }, [tripId])
+
+  const toggleManualDone = (activityId: string) => {
+    setManualDone(prev => {
+      const next = new Set(prev)
+      next.has(activityId) ? next.delete(activityId) : next.add(activityId)
+      saveDoneSet(tripId, next)
+      return next
+    })
+  }
+
+  const isDone = (act: ItineraryActivity, dayDate: string) =>
+    manualDone.has(act.id) || isActivityDone(dayDate, act.time, now)
+
+  // Find the single activity that's currently "in progress":
+  // today's last activity whose time has passed (or first activity if none yet).
+  const inProgressId = useMemo(() => {
+    const today = localDateStr(now)
+    const todayDay = trip.itinerary.find(d => d.date === today)
+    if (!todayDay || todayDay.activities.length === 0) return null
+    const nowMs = now.getTime()
+    const sorted = [...todayDay.activities].sort((a, b) => a.time.localeCompare(b.time))
+    let candidate: ItineraryActivity | null = null
+    for (const a of sorted) {
+      if (manualDone.has(a.id)) continue
+      if (!a.time) { candidate = candidate ?? a; continue }
+      const ts = new Date(`${today}T${a.time}`).getTime()
+      if (!Number.isNaN(ts) && ts <= nowMs) candidate = a
+    }
+    return candidate?.id ?? null
+  }, [trip.itinerary, now, manualDone])
+
+  // Sticky "Jump to today" — only show if today's day card exists and is scrolled past viewport.
+  const todayCardRef = useRef<HTMLDivElement | null>(null)
+  const [showJumpToToday, setShowJumpToToday] = useState(false)
+  const todayDayId = useMemo(() => {
+    const today = localDateStr(now)
+    return trip.itinerary.find(d => d.date === today)?.id ?? null
+  }, [trip.itinerary, now])
+
+  useEffect(() => {
+    const el = todayCardRef.current
+    if (!el) { setShowJumpToToday(false); return }
+    const observer = new IntersectionObserver(([entry]) => {
+      setShowJumpToToday(!entry.isIntersecting)
+    }, { rootMargin: '-80px 0px -80px 0px' })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [todayDayId])
+
+  const jumpToToday = () => {
+    todayCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 
   const toggleDay = (id: string) => {
     setExpandedDays(prev => {
@@ -184,7 +265,7 @@ export default function Timeline() {
           {trip.itinerary.map((day, i) => {
             const isExpanded = expandedDays.has(day.id)
             const phase = dayPhase(day.date, now)
-            const doneCount = day.activities.filter(a => isActivityDone(day.date, a.time, now)).length
+            const doneCount = day.activities.filter(a => isDone(a, day.date)).length
             const total = day.activities.length
             // A day with date in the past counts as fully done even if it has zero activities.
             const allDone = phase === 'past' || (total > 0 && doneCount === total)
@@ -192,6 +273,7 @@ export default function Timeline() {
             return (
               <motion.div
                 key={day.id}
+                ref={day.id === todayDayId ? todayCardRef : undefined}
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
@@ -270,13 +352,26 @@ export default function Timeline() {
                           {day.activities.map((act, ai) => {
                             const cfg = activityTypeConfig[act.type]
                             const Icon = cfg.icon
-                            const done = isActivityDone(day.date, act.time, now)
+                            const done = isDone(act, day.date)
+                            const manualOnly = manualDone.has(act.id) && !isActivityDone(day.date, act.time, now)
+                            const inProgress = !done && act.id === inProgressId
                             return (
-                              <div key={act.id} className={cn('flex items-start gap-3', done && 'opacity-50')}>
-                                <div className="flex flex-col items-center">
+                              <div key={act.id} className={cn(
+                                'flex items-start gap-3 rounded-xl -mx-1 px-1 transition-all',
+                                done && 'opacity-50',
+                                inProgress && 'bg-primary/5 ring-1 ring-primary/30 py-1.5'
+                              )}>
+                                <button
+                                  onClick={() => toggleManualDone(act.id)}
+                                  aria-label={done ? 'Mark as not done' : 'Mark as done'}
+                                  title={done ? (manualOnly ? 'Manually marked done — tap to undo' : 'Auto-detected as past — tap to override') : 'Tap to mark done'}
+                                  className="flex flex-col items-center shrink-0 group focus:outline-none"
+                                >
                                   <div className={cn(
-                                    'p-1.5 rounded-lg shrink-0 relative',
-                                    done ? 'bg-emerald-100 dark:bg-emerald-900/30' : cfg.color.split(' ').slice(1).join(' ')
+                                    'p-1.5 rounded-lg relative transition-colors',
+                                    done
+                                      ? 'bg-emerald-100 dark:bg-emerald-900/30 group-hover:bg-emerald-200 dark:group-hover:bg-emerald-900/50'
+                                      : cfg.color.split(' ').slice(1).join(' ') + ' group-hover:ring-2 group-hover:ring-emerald-400/40'
                                   )}>
                                     {done
                                       ? <Check className="h-3.5 w-3.5 text-emerald-600" strokeWidth={3} />
@@ -286,22 +381,32 @@ export default function Timeline() {
                                   {ai < day.activities.length - 1 && (
                                     <div className="w-[2px] h-4 bg-border mt-1" />
                                   )}
-                                </div>
+                                </button>
                                 <div className="flex-1 min-w-0 pb-1">
                                   <div className="flex items-start justify-between gap-2">
                                     <div className="flex-1 min-w-0">
-                                      {act.time && (
-                                        <div className="flex items-center gap-1 text-xs text-muted-foreground mb-0.5">
-                                          <Clock className="h-3 w-3" />
-                                          <span className="font-mono">
-                                            {act.time.includes(':') ? (() => {
-                                              const [h, m] = act.time.split(':').map(Number)
-                                              const p = h >= 12 ? 'PM' : 'AM'
-                                              return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${p}`
-                                            })() : act.time}
-                                          </span>
-                                        </div>
-                                      )}
+                                      <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                        {act.time && (
+                                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                            <Clock className="h-3 w-3" />
+                                            <span className="font-mono">
+                                              {act.time.includes(':') ? (() => {
+                                                const [h, m] = act.time.split(':').map(Number)
+                                                const p = h >= 12 ? 'PM' : 'AM'
+                                                return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${p}`
+                                              })() : act.time}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {inProgress && (
+                                          <Badge className="text-[9px] px-1.5 py-0 bg-primary text-white border-0 uppercase tracking-wider flex items-center gap-1">
+                                            <Circle className="h-2 w-2 fill-current animate-pulse" /> Now
+                                          </Badge>
+                                        )}
+                                        {manualOnly && (
+                                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Marked</Badge>
+                                        )}
+                                      </div>
                                       <p className={cn('text-sm font-medium truncate', done && 'line-through')}>{act.title}</p>
                                       {act.description && (
                                         <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{act.description}</p>
@@ -356,6 +461,22 @@ export default function Timeline() {
           </div>
         )}
       </div>
+
+      {/* Floating "Jump to today" button */}
+      <AnimatePresence>
+        {todayDayId && showJumpToToday && (
+          <motion.button
+            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            onClick={jumpToToday}
+            className="fixed bottom-28 right-4 z-[1500] bg-primary text-white px-4 py-2.5 rounded-full shadow-lg flex items-center gap-2 text-xs font-bold"
+          >
+            <ArrowDownToLine className="h-3.5 w-3.5" />
+            Today
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* Day Dialog */}
       <Dialog open={dayDialogOpen} onOpenChange={setDayDialogOpen}>
