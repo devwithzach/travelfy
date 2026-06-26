@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   UtensilsCrossed, ShoppingBag, Camera, Gift,
   Bus, Pill, Loader2, Navigation, X, Clock, Footprints,
-  Bookmark, BookmarkCheck, Star
+  Bookmark, BookmarkCheck, Star, LocateFixed
 } from 'lucide-react'
 import NavigationBanner from '@/components/map/NavigationBanner'
 import SavePlaceSheet from '@/components/map/SavePlaceSheet'
@@ -337,6 +337,47 @@ export default function MapExplorer() {
   const [saveRating, setSaveRating] = useState(5)
   const [saveNotes, setSaveNotes] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // "Locate me" state (outside nav mode)
+  const [locating, setLocating] = useState(false)
+
+  const locateMe = useCallback(() => {
+    if (!navigator.geolocation || !mapRef.current) {
+      setError('Geolocation not supported by this browser.')
+      return
+    }
+    setLocating(true)
+    setError(null)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude
+        const lon = pos.coords.longitude
+        if (!mapRef.current) return
+        mapRef.current.flyTo([lat, lon], 16, { duration: 1 })
+        if (userMarkerRef.current) {
+          userMarkerRef.current.setLatLng([lat, lon])
+        } else {
+          userMarkerRef.current = L.circleMarker([lat, lon], {
+            radius: 10, fillColor: '#2563EB', color: 'white', weight: 3, fillOpacity: 1,
+          }).addTo(mapRef.current)
+        }
+        setLocating(false)
+      },
+      (err) => {
+        setLocating(false)
+        const msg =
+          err.code === err.PERMISSION_DENIED
+            ? 'Location permission denied. Enable it in your browser settings.'
+            : err.code === err.POSITION_UNAVAILABLE
+              ? 'Location unavailable. Check GPS or try outdoors.'
+              : err.code === err.TIMEOUT
+                ? 'Location request timed out.'
+                : 'Could not get your location.'
+        setError(msg)
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 },
+    )
+  }, [])
 
   // Init map
   useEffect(() => {
@@ -677,6 +718,21 @@ export default function MapExplorer() {
 
       {/* Map */}
       <div ref={mapElRef} className="flex-1 w-full" style={{ zIndex: 1 }} />
+
+      {/* Locate-me FAB — hidden during nav mode (which auto-follows the user) */}
+      {!navMode && (
+        <button
+          onClick={locateMe}
+          disabled={locating}
+          aria-label="Center on my location"
+          className="absolute bottom-[88px] right-3 z-[1002] w-11 h-11 rounded-full bg-background border border-border shadow-lg flex items-center justify-center active:scale-95 transition-transform disabled:opacity-60"
+        >
+          {locating
+            ? <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            : <LocateFixed className="h-5 w-5 text-primary" />
+          }
+        </button>
+      )}
 
       {/* Nav bottom ETA bar */}
       <AnimatePresence>
