@@ -21,6 +21,8 @@ import Currency from '@/pages/Currency'
 import Settings from '@/pages/Settings'
 import MapExplorer from '@/pages/MapExplorer'
 import Photos from '@/pages/Photos'
+import InstallPrompt from '@/components/common/InstallPrompt'
+import PWAUpdatePrompt from '@/components/common/PWAUpdatePrompt'
 import { motion } from 'framer-motion'
 import { Plane } from 'lucide-react'
 
@@ -83,6 +85,8 @@ export default function App() {
         <AuthProvider>
           <BrowserRouter>
             <AppRoutes />
+            <InstallPrompt />
+            <PWAUpdatePrompt />
           </BrowserRouter>
         </AuthProvider>
       </ThemeProvider>
