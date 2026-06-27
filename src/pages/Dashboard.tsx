@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Plane, Building2, Map, ListChecks, DollarSign,
   AlertCircle, Clock, CalendarDays, ChevronRight,
-  TrendingUp, CheckSquare, FileText, Globe, Circle, Check, MapPin, Plus
+  TrendingUp, CheckSquare, FileText, Globe, Circle, Check, MapPin, Plus, Pencil
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -118,6 +118,9 @@ export default function Dashboard() {
   // Profile sheet (avatar tap on greeting opens it).
   const [profileOpen, setProfileOpen] = useState(false)
   const avatarInitial = (name.charAt(0) || user?.email?.charAt(0) || '?').toUpperCase()
+  // Name "source": did we get it from a real saved value (settings or auth metadata)
+  // or did we fall back to email-parsing? When fallback, show a hint to set it.
+  const hasRealName = !!(settings.travelerName?.trim()) || !!(user?.user_metadata?.full_name as string | undefined)?.trim()
 
   const quickActions = [
     { label: 'Flights', icon: Plane, to: '/flights', color: 'bg-blue-500' },
@@ -143,14 +146,19 @@ export default function Dashboard() {
           <button
             onClick={() => setProfileOpen(true)}
             aria-label="Edit profile"
-            className="flex items-center gap-3 min-w-0 flex-1 text-left active:scale-[0.98] transition-transform"
+            className="group flex items-center gap-3 min-w-0 flex-1 text-left active:scale-[0.98] transition-transform"
           >
-            <div className="w-11 h-11 rounded-2xl gradient-brand flex items-center justify-center text-white text-base font-bold shrink-0">
+            <div className="relative w-11 h-11 rounded-2xl gradient-brand flex items-center justify-center text-white text-base font-bold shrink-0">
               {avatarInitial}
+              <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-background border-2 border-background flex items-center justify-center">
+                <span className="w-full h-full rounded-full bg-primary flex items-center justify-center">
+                  <Pencil className="h-2.5 w-2.5 text-white" strokeWidth={3} />
+                </span>
+              </span>
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-xs text-muted-foreground uppercase tracking-widest">{greeting}</p>
-              <p className="text-2xl font-bold mt-0.5 truncate max-w-full leading-tight">
+              <p className="text-2xl font-bold mt-0.5 truncate max-w-full leading-tight flex items-center gap-1.5">
                 {name} 👋
               </p>
             </div>
@@ -191,6 +199,25 @@ export default function Dashboard() {
           )}
         </div>
       </motion.div>
+
+      {/* One-time prompt: greeting fell back to email-parsing because no real
+          name is saved anywhere. Tap to open ProfileSheet and fix it. */}
+      {!hasRealName && (
+        <motion.button
+          variants={itemVariants}
+          onClick={() => setProfileOpen(true)}
+          className="w-full flex items-center gap-3 p-3 rounded-2xl bg-primary/10 border border-primary/30 text-left active:scale-[0.99] transition-all"
+        >
+          <Pencil className="h-4 w-4 text-primary shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-primary">Set your name</p>
+            <p className="text-xs text-muted-foreground">
+              We're calling you <span className="font-medium text-foreground">{name}</span> based on your email. Tap to fix.
+            </p>
+          </div>
+          <ChevronRight className="h-4 w-4 text-primary shrink-0" />
+        </motion.button>
+      )}
 
       {/* LOBBY MODE — no trip selected. Show only the picker, no trip-specific
           features. User must explicitly enter a trip from /trips before
