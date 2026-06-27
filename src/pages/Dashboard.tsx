@@ -12,7 +12,7 @@ import { useCurrentPlace } from '@/hooks/useCurrentPlace'
 import { countryFlag } from '@/components/map/geocode'
 import { getDaysUntil, formatDate, formatShortDate, getTripProgress, getTripStatus, formatTime } from '@/utils/dateUtils'
 import { sumExpenses } from '@/utils/currency'
-import { findInProgressActivity, findNextUpcomingActivity, localDateStr } from '@/utils/itinerary'
+import { findInProgressActivity, findNextUpcomingActivity, localDateStr, isActivityDone } from '@/utils/itinerary'
 import { findNextFlight, deriveFlightStatus } from '@/utils/flight'
 import QuickAddExpense from '@/components/common/QuickAddExpense'
 import { Card, CardContent } from '@/components/ui/card'
@@ -112,13 +112,10 @@ export default function Dashboard() {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="px-4 pb-4"
+      className="px-4 pb-4 pt-[max(2.5rem,env(safe-area-inset-top))] space-y-3"
     >
       {/* Personalized greeting + current location + local time */}
-      <motion.div
-        variants={itemVariants}
-        className="pt-[max(2.5rem,env(safe-area-inset-top))] pb-2"
-      >
+      <motion.div variants={itemVariants}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-xs text-muted-foreground uppercase tracking-widest">{greeting}</p>
@@ -162,7 +159,7 @@ export default function Dashboard() {
       </motion.div>
 
       {/* Hero Card */}
-      <motion.div variants={itemVariants} className="pb-4">
+      <motion.div variants={itemVariants}>
         <div className="relative overflow-hidden rounded-3xl gradient-hero p-6 text-white shadow-xl shadow-primary/20">
           <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-12 translate-x-12" />
           <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-10 -translate-x-8" />
@@ -226,7 +223,7 @@ export default function Dashboard() {
         <motion.div variants={itemVariants}>
           {inProgress && (
             <Card
-              className="mb-3 ring-2 ring-primary/40 shadow-md cursor-pointer active:scale-[0.99] transition-transform"
+              className="ring-2 ring-primary/40 shadow-md cursor-pointer active:scale-[0.99] transition-transform"
               onClick={() => navigate('/timeline')}
             >
               <CardContent className="p-4">
@@ -268,15 +265,15 @@ export default function Dashboard() {
           )}
           {nextUpcoming && (
             <Card
-              className="mb-3 cursor-pointer active:scale-[0.99] transition-transform hover:shadow-md"
+              className="cursor-pointer active:scale-[0.99] transition-transform hover:shadow-md"
               onClick={() => navigate('/timeline')}
             >
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Clock className="h-3.5 w-3.5 text-emerald-500" />
+                  <Clock className="h-3.5 w-3.5 text-emerald-600" />
                   <span className="text-xs font-bold text-emerald-600 uppercase tracking-widest">Up Next</span>
                   <span className="text-xs text-muted-foreground ml-auto">
-                    {nextUpcoming.day.date === new Date().toISOString().split('T')[0]
+                    {nextUpcoming.day.date === localDateStr(now)
                       ? (nextUpcoming.activity.time ? formatTime(nextUpcoming.activity.time) : 'Today')
                       : formatShortDate(nextUpcoming.day.date)
                     }
@@ -298,7 +295,7 @@ export default function Dashboard() {
       {nextFlight && (
         <motion.div variants={itemVariants}>
           <button onClick={() => navigate('/flights')} className="w-full text-left">
-            <Card className="mb-3 hover:shadow-md transition-shadow active:scale-[0.99]">
+            <Card className="hover:shadow-md transition-shadow active:scale-[0.99]">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -343,23 +340,23 @@ export default function Dashboard() {
         </motion.div>
       )}
 
-      {/* Stats Row */}
-      <motion.div variants={itemVariants} className="grid grid-cols-3 gap-3 mb-3">
+      {/* Stats Row — all 3 tiles share the same vertical structure + visual weight */}
+      <motion.div variants={itemVariants} className="grid grid-cols-3 gap-3">
         <Card className="text-center p-4 hover:shadow-md transition-shadow cursor-pointer active:scale-[0.98]" onClick={() => navigate('/expenses')}>
-          <div className="text-xl font-bold text-rose-600 leading-tight">
-            {settings.homeCurrency} {todaySpent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          <div className="text-2xl font-bold text-rose-600 leading-tight tabular-nums truncate">
+            {todaySpent.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
-          <div className="text-xs text-muted-foreground mt-0.5">Today</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5 uppercase tracking-wider">{settings.homeCurrency} · Today</div>
           <DollarSign className="h-4 w-4 text-rose-400 mx-auto mt-1" />
         </Card>
         <Card className="text-center p-4 hover:shadow-md transition-shadow cursor-pointer active:scale-[0.98]" onClick={() => navigate('/checklist')}>
-          <div className="text-2xl font-bold text-primary">{checkedCount}/{checklist.length}</div>
-          <div className="text-xs text-muted-foreground mt-0.5">Packed</div>
+          <div className="text-2xl font-bold text-primary leading-tight tabular-nums">{checkedCount}/{checklist.length}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5 uppercase tracking-wider">Packed</div>
           <CheckSquare className="h-4 w-4 text-primary/40 mx-auto mt-1" />
         </Card>
         <Card className="text-center p-4 hover:shadow-md transition-shadow cursor-pointer active:scale-[0.98]" onClick={() => navigate('/expenses')}>
-          <div className="text-2xl font-bold text-amber-600">{Math.round(budgetUsed)}%</div>
-          <div className="text-xs text-muted-foreground mt-0.5">Budget</div>
+          <div className="text-2xl font-bold text-amber-600 leading-tight tabular-nums">{Math.round(budgetUsed)}%</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5 uppercase tracking-wider">Budget</div>
           <TrendingUp className="h-4 w-4 text-amber-400 mx-auto mt-1" />
         </Card>
       </motion.div>
@@ -367,11 +364,11 @@ export default function Dashboard() {
       {/* Budget Card */}
       {totalBudget > 0 && (
         <motion.div variants={itemVariants}>
-          <Card className="mb-3 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/expenses')}>
+          <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/expenses')}>
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-semibold flex items-center gap-2">
-                  <DollarSign className="h-4 w-4 text-rose-500" />
+                  <DollarSign className="h-4 w-4 text-rose-600" />
                   Budget Tracker
                 </span>
                 <span className="text-xs text-muted-foreground">
@@ -390,11 +387,11 @@ export default function Dashboard() {
       {/* Checklist Preview */}
       {checklist.length > 0 && (
         <motion.div variants={itemVariants}>
-          <Card className="mb-3">
+          <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-semibold flex items-center gap-2">
-                  <ListChecks className="h-4 w-4 text-amber-500" />
+                  <ListChecks className="h-4 w-4 text-amber-600" />
                   Packing Progress
                 </span>
                 <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => navigate('/checklist')}>
@@ -410,40 +407,45 @@ export default function Dashboard() {
         </motion.div>
       )}
 
-      {/* Quick Actions */}
+      {/* Quick Actions — wrapped in Card for consistency with other sections */}
       <motion.div variants={itemVariants}>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Quick Access</h2>
-        </div>
-        <div className="grid grid-cols-4 gap-2">
-          {quickActions.map(({ label, icon: Icon, to, color }) => (
-            <motion.button
-              key={to}
-              whileTap={{ scale: 0.92 }}
-              onClick={() => navigate(to)}
-              className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-card border border-border hover:shadow-md transition-all"
-            >
-              <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center shadow-sm`}>
-                <Icon className="h-5 w-5 text-white" strokeWidth={1.8} />
-              </div>
-              <span className="text-[11px] font-medium text-muted-foreground leading-tight text-center">{label}</span>
-            </motion.button>
-          ))}
-        </div>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Plus className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold">Quick Access</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {quickActions.map(({ label, icon: Icon, to, color }) => (
+                <motion.button
+                  key={to}
+                  whileTap={{ scale: 0.92 }}
+                  onClick={() => navigate(to)}
+                  className="flex flex-col items-center gap-2 p-2 rounded-xl hover:bg-accent transition-colors"
+                >
+                  <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center shadow-sm`}>
+                    <Icon className="h-5 w-5 text-white" strokeWidth={1.8} />
+                  </div>
+                  <span className="text-[11px] font-medium text-muted-foreground leading-tight text-center">{label}</span>
+                </motion.button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </motion.div>
 
       {/* Today's Itinerary Preview */}
-      <motion.div variants={itemVariants} className="mt-3">
-        <TodayPreview />
+      <motion.div variants={itemVariants}>
+        <TodayPreview now={now} />
       </motion.div>
 
       {/* Tour Notes */}
       {trip.tourNotes.length > 0 && (
-        <motion.div variants={itemVariants} className="mt-3">
+        <motion.div variants={itemVariants}>
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-3">
-                <Clock className="h-4 w-4 text-amber-500" />
+                <AlertCircle className="h-4 w-4 text-amber-600" />
                 <span className="text-sm font-semibold">Important Tour Notes</span>
               </div>
               <div className="space-y-2">
@@ -479,11 +481,12 @@ export default function Dashboard() {
   )
 }
 
-function TodayPreview() {
+function TodayPreview({ now }: { now: Date }) {
   const { trip } = useTrip()
   const navigate = useNavigate()
 
-  const today = new Date().toISOString().split('T')[0]
+  // Local-timezone date string so we match Timeline's logic exactly.
+  const today = localDateStr(now)
   const todayItinerary = trip.itinerary.find(d => d.date === today)
 
   if (!todayItinerary) return null
@@ -493,7 +496,7 @@ function TodayPreview() {
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-semibold flex items-center gap-2">
-            <CalendarDays className="h-4 w-4 text-emerald-500" />
+            <CalendarDays className="h-4 w-4 text-emerald-600" />
             Today's Plan
           </span>
           <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => navigate('/timeline')}>
@@ -501,17 +504,20 @@ function TodayPreview() {
           </Button>
         </div>
         <div className="space-y-2">
-          {todayItinerary.activities.slice(0, 3).map(act => (
-            <div key={act.id} className="flex items-center gap-3">
-              <div className="text-xs text-muted-foreground w-14 shrink-0 font-mono">
-                {act.time ? formatTime(act.time) : '—'}
+          {todayItinerary.activities.slice(0, 4).map(act => {
+            const done = isActivityDone(today, act.time, !!act.done, now)
+            return (
+              <div key={act.id} className={`flex items-center gap-3 ${done ? 'opacity-50' : ''}`}>
+                <div className="text-xs text-muted-foreground w-14 shrink-0 font-mono tabular-nums">
+                  {act.time ? formatTime(act.time) : '—'}
+                </div>
+                <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${done ? 'bg-emerald-500' : 'bg-primary'}`} />
+                <div className={`text-sm font-medium truncate ${done ? 'line-through' : ''}`}>{act.title}</div>
               </div>
-              <div className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-              <div className="text-sm font-medium truncate">{act.title}</div>
-            </div>
-          ))}
-          {todayItinerary.activities.length > 3 && (
-            <p className="text-xs text-primary pl-[70px]">+{todayItinerary.activities.length - 3} more</p>
+            )
+          })}
+          {todayItinerary.activities.length > 4 && (
+            <p className="text-xs text-primary pl-[70px]">+{todayItinerary.activities.length - 4} more</p>
           )}
         </div>
       </CardContent>
