@@ -158,24 +158,33 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
-      {/* Hero Card */}
+      {/* Hero Card — entire card is tappable to switch trips */}
       <motion.div variants={itemVariants}>
-        <div className="relative overflow-hidden rounded-3xl gradient-hero p-6 text-white shadow-xl shadow-primary/20">
+        <button
+          onClick={() => navigate('/trips')}
+          aria-label="Switch trip"
+          className="w-full text-left relative overflow-hidden rounded-3xl gradient-hero p-6 text-white shadow-xl shadow-primary/20 active:scale-[0.99] transition-transform"
+        >
           <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-12 translate-x-12" />
           <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-10 -translate-x-8" />
 
           <div className="relative z-10">
             <div className="flex items-start justify-between mb-4">
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-white/70 text-xs font-medium uppercase tracking-widest mb-1">
                   {tripStatus === 'upcoming' ? 'Next Adventure' : tripStatus === 'active' ? 'Currently Traveling' : 'Trip Completed'}
                 </p>
-                <h2 className="text-2xl font-bold leading-tight">{tripInfo.name}</h2>
-                <p className="text-white/80 text-sm mt-1">{tripInfo.description}</p>
+                <h2 className="text-2xl font-bold leading-tight truncate">{tripInfo.name}</h2>
+                <p className="text-white/80 text-sm mt-1 truncate">{tripInfo.description}</p>
               </div>
-              <Badge className="bg-white/20 text-white border-0 text-xs">
-                {tripStatus === 'upcoming' ? 'Upcoming' : tripStatus === 'active' ? 'Live' : 'Done'}
-              </Badge>
+              <div className="flex flex-col items-end gap-2 shrink-0 ml-2">
+                <Badge className="bg-white/20 text-white border-0 text-xs">
+                  {tripStatus === 'upcoming' ? 'Upcoming' : tripStatus === 'active' ? 'Live' : 'Done'}
+                </Badge>
+                <span className="text-[10px] text-white/60 flex items-center gap-1">
+                  Switch <ChevronRight className="h-3 w-3" />
+                </span>
+              </div>
             </div>
 
             <div className="flex items-center gap-4 mb-4">
@@ -215,7 +224,7 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-        </div>
+        </button>
       </motion.div>
 
       {/* Now / Next Activity */}

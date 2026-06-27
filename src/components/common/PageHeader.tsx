@@ -1,5 +1,8 @@
 import { motion } from 'framer-motion'
+import { Layers } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { useTrip } from '@/contexts/TripContext'
 import { cn } from '@/utils/cn'
 
 interface PageHeaderProps {
@@ -9,6 +12,8 @@ interface PageHeaderProps {
   iconColor?: string
   action?: React.ReactNode
   className?: string
+  /** Hide the dynamic trip breadcrumb above the title (default: show). */
+  hideTripContext?: boolean
 }
 
 export default function PageHeader({
@@ -18,7 +23,12 @@ export default function PageHeader({
   iconColor = 'text-primary',
   action,
   className,
+  hideTripContext = false,
 }: PageHeaderProps) {
+  const { trip } = useTrip()
+  const navigate = useNavigate()
+  const tripName = trip.tripInfo.name?.trim()
+
   return (
     <motion.div
       initial={{ opacity: 0, y: -10 }}
@@ -27,6 +37,19 @@ export default function PageHeader({
       // title isn't tucked under the status bar on notched devices.
       className={cn('px-4 pb-4 pt-[max(3rem,env(safe-area-inset-top))]', className)}
     >
+      {/* Trip breadcrumb — always shown when a trip is loaded, tappable to
+          switch trips. Single source of truth: the active trip in TripContext
+          (loaded from Supabase, scoped to the signed-in user via RLS). */}
+      {!hideTripContext && tripName && (
+        <button
+          onClick={() => navigate('/trips')}
+          className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors uppercase tracking-widest mb-2 active:scale-95 origin-left"
+          aria-label="Switch trip"
+        >
+          <Layers className="h-3 w-3" />
+          <span className="truncate max-w-[70vw]">{tripName}</span>
+        </button>
+      )}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {Icon && (

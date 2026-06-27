@@ -5,8 +5,9 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useTrip } from '@/contexts/TripContext'
 import {
   Camera, Plus, X, Trash2, MapPin, Tag, ChevronLeft,
-  ChevronRight, Loader2, Image, Download
+  ChevronRight, Loader2, Image, Download, Layers
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { compressImage } from '@/utils/image'
 
 const MAX_RAW_BYTES = 25 * 1024 * 1024 // 25MB before compression
@@ -32,6 +33,7 @@ interface TripPhoto {
 export default function Photos() {
   const { user } = useAuth()
   const { trip } = useTrip()
+  const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [photos, setPhotos] = useState<TripPhoto[]>([])
@@ -207,14 +209,26 @@ export default function Photos() {
     <div className="min-h-screen bg-background pb-28">
       {/* Header */}
       <div className="px-4 pb-4 pt-[max(1.5rem,env(safe-area-inset-top))]">
+        {/* Trip breadcrumb (dynamic — reads active trip from TripContext) */}
+        {trip.tripInfo.name && (
+          <button
+            onClick={() => navigate('/trips')}
+            className="flex items-center gap-1.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors uppercase tracking-widest mb-2 active:scale-95 origin-left"
+            aria-label="Switch trip"
+          >
+            <Layers className="h-3 w-3" />
+            <span className="truncate max-w-[70vw]">{trip.tripInfo.name}</span>
+          </button>
+        )}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Trip Photos</h1>
+            <h1 className="text-xl font-bold tracking-tight">Trip Photos</h1>
             <p className="text-sm text-muted-foreground mt-0.5">{photos.length} photo{photos.length !== 1 ? 's' : ''} captured</p>
           </div>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="w-11 h-11 rounded-2xl gradient-brand flex items-center justify-center shadow-lg"
+            aria-label="Add photo"
           >
             <Plus className="h-5 w-5 text-white" />
           </button>
