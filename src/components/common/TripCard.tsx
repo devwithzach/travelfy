@@ -83,10 +83,22 @@ export default function TripCard({ trip, onSelect, onDelete, compact = false }: 
         onClick={onSelect}
         className="w-full text-left rounded-2xl overflow-hidden shadow-md hover:shadow-lg transition-shadow active:scale-[0.98]"
       >
-        {/* Gradient hero strip */}
-        <div className={cn('relative bg-gradient-to-br p-5 text-white', statusGradient[liveStatus])}>
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-10 translate-x-10" />
-          <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-8 -translate-x-6" />
+        {/* Hero strip — cover photo if set, otherwise status gradient */}
+        <div
+          className={cn(
+            'relative p-5 text-white',
+            !trip.coverImage && `bg-gradient-to-br ${statusGradient[liveStatus]}`,
+          )}
+          style={trip.coverImage
+            ? { backgroundImage: `linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.7) 100%), url(${trip.coverImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+            : undefined}
+        >
+          {!trip.coverImage && (
+            <>
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-10 translate-x-10" />
+              <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-8 -translate-x-6" />
+            </>
+          )}
           <div className="relative">
             <div className="flex items-start justify-between gap-2 mb-2">
               <span className="text-[10px] font-bold uppercase tracking-widest opacity-90 bg-white/15 px-2 py-0.5 rounded-full">

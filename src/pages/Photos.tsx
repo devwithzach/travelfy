@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useTrip } from '@/contexts/TripContext'
 import {
   Camera, Plus, X, Trash2, MapPin, Tag, ChevronLeft,
-  ChevronRight, Loader2, Image, Download, Layers
+  ChevronRight, Loader2, Image, Download, Layers, Star, StarOff
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { compressImage } from '@/utils/image'
@@ -32,7 +32,15 @@ interface TripPhoto {
 
 export default function Photos() {
   const { user } = useAuth()
-  const { trip } = useTrip()
+  const { trip, updateTrip } = useTrip()
+  const coverUrl = trip.tripInfo.coverImage
+
+  const setAsCover = (url: string) => {
+    updateTrip(prev => ({ ...prev, tripInfo: { ...prev.tripInfo, coverImage: url } }))
+  }
+  const clearCover = () => {
+    updateTrip(prev => ({ ...prev, tripInfo: { ...prev.tripInfo, coverImage: '' } }))
+  }
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -463,14 +471,26 @@ export default function Photos() {
             className="fixed inset-0 z-50 bg-black flex flex-col"
           >
             {/* Top bar */}
-            <div className="flex items-center justify-between px-4 pt-safe pt-4 pb-3 bg-black/60">
-              <button onClick={() => setLightboxIndex(null)} className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+            <div className="flex items-center justify-between px-4 pt-safe pt-4 pb-3 bg-black/60 gap-2">
+              <button onClick={() => setLightboxIndex(null)} className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center shrink-0">
                 <X className="h-5 w-5 text-white" />
               </button>
-              <p className="text-white/70 text-sm">{lightboxIndex + 1} / {photos.length}</p>
+              <p className="text-white/70 text-sm flex-1 text-center">{lightboxIndex + 1} / {photos.length}</p>
+              <button
+                onClick={() => coverUrl === lightboxPhoto.public_url ? clearCover() : setAsCover(lightboxPhoto.public_url)}
+                aria-label={coverUrl === lightboxPhoto.public_url ? 'Remove as trip cover' : 'Set as trip cover'}
+                title={coverUrl === lightboxPhoto.public_url ? 'Current trip cover — tap to remove' : 'Set as trip cover'}
+                className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${coverUrl === lightboxPhoto.public_url ? 'bg-amber-500/30' : 'bg-white/10'}`}
+              >
+                {coverUrl === lightboxPhoto.public_url
+                  ? <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                  : <StarOff className="h-4 w-4 text-white" />
+                }
+              </button>
               <button
                 onClick={() => deletePhoto(lightboxPhoto)}
-                className="w-9 h-9 rounded-full bg-red-500/20 flex items-center justify-center"
+                aria-label="Delete photo"
+                className="w-9 h-9 rounded-full bg-red-500/20 flex items-center justify-center shrink-0"
               >
                 <Trash2 className="h-4 w-4 text-red-400" />
               </button>

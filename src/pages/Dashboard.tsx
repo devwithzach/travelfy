@@ -16,6 +16,7 @@ import { findInProgressActivity, findNextUpcomingActivity, localDateStr, isActiv
 import { findNextFlight, deriveFlightStatus } from '@/utils/flight'
 import QuickAddExpense from '@/components/common/QuickAddExpense'
 import TripCard from '@/components/common/TripCard'
+import { computeExpiryAlerts } from '@/utils/expiry'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -92,6 +93,9 @@ export default function Dashboard() {
   const todayStr = localDateStr(now)
   const todayExpenses = expenses.filter(e => e.date === todayStr)
   const { total: todaySpent } = sumExpenses(trip.currencyRates, todayExpenses, settings.homeCurrency)
+
+  // Passport/visa risk alerts — only relevant when a trip is loaded.
+  const expiryAlerts = activeTripId ? computeExpiryAlerts(trip.passport, trip.visas, tripInfo, now) : []
 
   const [quickAddOpen, setQuickAddOpen] = useState(false)
 
@@ -217,8 +221,13 @@ export default function Dashboard() {
         <button
           onClick={() => navigate('/trips')}
           aria-label="Switch trip"
-          className="w-full text-left relative overflow-hidden rounded-3xl gradient-hero p-6 text-white shadow-xl shadow-primary/20 active:scale-[0.99] transition-transform"
+          className="w-full text-left relative overflow-hidden rounded-3xl p-6 text-white shadow-xl shadow-primary/20 active:scale-[0.99] transition-transform"
+          style={tripInfo.coverImage
+            ? { backgroundImage: `linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0.65) 100%), url(${tripInfo.coverImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+            : undefined}
         >
+          {/* Fallback gradient when no cover photo is set. */}
+          {!tripInfo.coverImage && <div className="absolute inset-0 gradient-hero" />}
           <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-12 translate-x-12" />
           <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/5 rounded-full translate-y-10 -translate-x-8" />
 
@@ -280,6 +289,43 @@ export default function Dashboard() {
           </div>
         </button>
       </motion.div>
+
+      {/* Expiry alerts — passport + visas tied to the active trip's end date */}
+      {expiryAlerts.length > 0 && (
+        <motion.div variants={itemVariants} className="space-y-2">
+          {expiryAlerts.map(a => (
+            <button
+              key={a.id}
+              onClick={() => navigate(a.href)}
+              className={
+                'w-full text-left rounded-2xl p-3 flex items-start gap-3 transition-all active:scale-[0.99] ' +
+                (a.severity === 'critical'
+                  ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/60 hover:bg-red-100/60 dark:hover:bg-red-900/30'
+                  : 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/60 hover:bg-amber-100/60 dark:hover:bg-amber-900/30')
+              }
+            >
+              <AlertCircle className={
+                'h-5 w-5 shrink-0 mt-0.5 ' +
+                (a.severity === 'critical' ? 'text-red-600 dark:text-red-400' : 'text-amber-600 dark:text-amber-400')
+              } />
+              <div className="flex-1 min-w-0">
+                <p className={
+                  'text-sm font-bold ' +
+                  (a.severity === 'critical' ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300')
+                }>{a.title}</p>
+                <p className={
+                  'text-xs mt-0.5 ' +
+                  (a.severity === 'critical' ? 'text-red-600/90 dark:text-red-400/90' : 'text-amber-700/80 dark:text-amber-400/80')
+                }>{a.detail}</p>
+              </div>
+              <ChevronRight className={
+                'h-4 w-4 shrink-0 mt-0.5 ' +
+                (a.severity === 'critical' ? 'text-red-500' : 'text-amber-500')
+              } />
+            </button>
+          ))}
+        </motion.div>
+      )}
 
       {/* Now / Next Activity */}
       {(inProgress || nextUpcoming) && (

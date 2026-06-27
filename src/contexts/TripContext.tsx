@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import type { TripData, TripSummary } from '@/types'
 import { storageService } from '@/services/storage'
 import { createEmptyTrip } from '@/data/emptyTrip'
+import { sampleTrip } from '@/data/sampleTrip'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface TripContextValue {
@@ -19,6 +20,7 @@ interface TripContextValue {
   resetTrip: () => Promise<void>
   exportTrip: () => string
   importTrip: (json: string) => Promise<boolean>
+  seedSampleTrip: () => Promise<string>
 }
 
 const TripContext = createContext<TripContextValue | null>(null)
@@ -127,6 +129,35 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
   const exportTrip = useCallback(() => storageService.exportTrip(trip), [trip])
 
+  // Seed a fully-populated sample trip into the user's account. All child IDs
+  // are regenerated so we don't collide with any existing rows. After save the
+  // new trip becomes the active trip.
+  const seedSampleTrip = useCallback(async (): Promise<string> => {
+    if (!user) throw new Error('Not authenticated')
+    const newId = crypto.randomUUID()
+    const fresh: TripData = JSON.parse(JSON.stringify(sampleTrip))
+    fresh.tripInfo.id = newId
+    fresh.flights = fresh.flights.map(f => ({ ...f, id: crypto.randomUUID() }))
+    fresh.hotels = fresh.hotels.map(h => ({ ...h, id: crypto.randomUUID() }))
+    fresh.itinerary = fresh.itinerary.map(d => ({
+      ...d,
+      id: crypto.randomUUID(),
+      activities: d.activities.map(a => ({ ...a, id: crypto.randomUUID() })),
+    }))
+    fresh.checklist = fresh.checklist.map(c => ({ ...c, id: crypto.randomUUID() }))
+    fresh.expenses = fresh.expenses.map(e => ({ ...e, id: crypto.randomUUID() }))
+    fresh.documents = fresh.documents.map(d => ({ ...d, id: crypto.randomUUID() }))
+    fresh.emergencyContacts = fresh.emergencyContacts.map(c => ({ ...c, id: crypto.randomUUID() }))
+    fresh.quickLinks = fresh.quickLinks.map(l => ({ ...l, id: crypto.randomUUID() }))
+    fresh.notes = fresh.notes.map(n => ({ ...n, id: crypto.randomUUID() }))
+    fresh.visas = fresh.visas.map(v => ({ ...v, id: crypto.randomUUID() }))
+
+    await storageService.saveTrip(user.id, fresh)
+    const list = await storageService.listTrips(user.id)
+    setTrips(list)
+    return newId
+  }, [user])
+
   const importTrip = useCallback(async (json: string) => {
     if (!user) return false
     const ok = await storageService.importTrip(user.id, json)
@@ -141,7 +172,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     <TripContext.Provider value={{
       trip, trips, activeTripId, loading, tripLoading, error, clearError,
       selectTrip, createNewTrip, deleteTripById,
-      updateTrip, resetTrip, exportTrip, importTrip,
+      updateTrip, resetTrip, exportTrip, importTrip, seedSampleTrip,
     }}>
       {children}
     </TripContext.Provider>

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Plane, Loader2 } from 'lucide-react'
+import { Plus, Plane, Loader2, Sparkles } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTrip } from '@/contexts/TripContext'
 import BottomNav from '@/layouts/BottomNav'
@@ -33,13 +33,27 @@ const emptyForm = { name: '', destination: '', startDate: '', endDate: '', descr
 export default function Trips() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { trips, loading, selectTrip, createNewTrip, deleteTripById } = useTrip()
+  const { trips, loading, selectTrip, createNewTrip, deleteTripById, seedSampleTrip } = useTrip()
 
   const [createOpen, setCreateOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [creating, setCreating] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<TripSummary | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [seeding, setSeeding] = useState(false)
+
+  const handleSeed = async () => {
+    setSeeding(true)
+    try {
+      const id = await seedSampleTrip()
+      selectTrip(id)
+      navigate('/')
+    } catch (err) {
+      console.error('Seed failed:', err)
+    } finally {
+      setSeeding(false)
+    }
+  }
 
   const handleSelect = (trip: TripSummary) => {
     selectTrip(trip.id)
@@ -121,6 +135,23 @@ export default function Trips() {
               <Plus className="h-4 w-4" />
               Create your first trip
             </Button>
+            <div className="flex items-center gap-2 w-full max-w-[260px]">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-[10px] text-muted-foreground uppercase tracking-widest">or</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleSeed}
+              disabled={seeding}
+              className="gap-2"
+            >
+              {seeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-amber-500" />}
+              Seed sample trip
+            </Button>
+            <p className="text-[11px] text-muted-foreground/70 max-w-[260px]">
+              Loads a fully-populated HK–Macau example with flights, hotels, itinerary, expenses, contacts, and visa info so you can poke around.
+            </p>
           </motion.div>
         ) : (
           <div className="flex flex-col gap-4">
@@ -143,6 +174,15 @@ export default function Trips() {
                 </motion.div>
               ))}
             </AnimatePresence>
+            <Button
+              variant="ghost"
+              onClick={handleSeed}
+              disabled={seeding}
+              className="gap-2 text-xs text-muted-foreground hover:text-foreground"
+            >
+              {seeding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 text-amber-500" />}
+              Seed another sample trip
+            </Button>
           </div>
         )}
       </div>
