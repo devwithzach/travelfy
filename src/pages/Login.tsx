@@ -33,7 +33,14 @@ export default function Login() {
       }
     } else {
       const { error } = await signIn(email, password)
-      if (error) setError(error)
+      if (error) {
+        setError(error)
+      } else {
+        // Lobby mode: fresh logins should land on the neutral home, not jump
+        // straight into the previous session's trip. The user explicitly
+        // re-enters a trip from /trips.
+        localStorage.removeItem('activeTripId')
+      }
     }
 
     setLoading(false)

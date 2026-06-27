@@ -32,7 +32,12 @@ export default function MainLayout() {
     )
   }
 
-  if (!activeTripId) return <Navigate to="/trips" replace />
+  // Lobby mode: when no trip is selected, only the Dashboard ("/") is
+  // accessible. Every trip-scoped page redirects to the trips picker so the
+  // user has to explicitly enter a trip before seeing its features.
+  if (!activeTripId && location.pathname !== '/') {
+    return <Navigate to="/trips" replace />
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

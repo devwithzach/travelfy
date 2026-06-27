@@ -49,10 +49,11 @@ function timeGreeting(d: Date): string {
 }
 
 export default function Dashboard() {
-  const { trip, updateTrip } = useTrip()
+  const { trip, updateTrip, activeTripId, trips } = useTrip()
   const { user } = useAuth()
   const place = useCurrentPlace()
   const navigate = useNavigate()
+  const inLobby = !activeTripId
 
   // Tick once a minute so the "Now" card and elapsed states stay fresh.
   const [now, setNow] = useState(() => new Date())
@@ -158,6 +159,63 @@ export default function Dashboard() {
         </div>
       </motion.div>
 
+      {/* LOBBY MODE — no trip selected. Show only the picker, no trip-specific
+          features. User must explicitly enter a trip from /trips before
+          anything else is accessible (MainLayout redirects every other route). */}
+      {inLobby && (
+        <motion.div variants={itemVariants}>
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2 mb-1">
+                <Plane className="h-4 w-4 text-primary" />
+                <span className="text-sm font-semibold">Pick a trip to start</span>
+              </div>
+              <p className="text-xs text-muted-foreground mb-4">
+                Tap a trip below to open its flights, hotels, timeline, photos, and everything else.
+              </p>
+              {trips.length === 0 ? (
+                <div className="text-center py-6">
+                  <p className="text-sm text-muted-foreground mb-3">You don't have any trips yet.</p>
+                  <Button onClick={() => navigate('/trips')} className="gap-1.5">
+                    <Plus className="h-4 w-4" /> Create your first trip
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {trips.slice(0, 4).map(t => (
+                    <button
+                      key={t.id}
+                      onClick={() => navigate('/trips')}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-accent active:scale-[0.99] transition-all text-left"
+                    >
+                      <div className="w-10 h-10 rounded-xl gradient-brand flex items-center justify-center shrink-0">
+                        <Plane className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold truncate">{t.name || 'Untitled Trip'}</p>
+                        <p className="text-xs text-muted-foreground truncate">{t.destination || '—'}</p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </button>
+                  ))}
+                  <Button
+                    variant="outline"
+                    onClick={() => navigate('/trips')}
+                    className="w-full mt-2 gap-1.5"
+                  >
+                    {trips.length > 4 ? `View all ${trips.length} trips` : 'Manage trips'}
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* IN-TRIP MODE — everything below requires an active trip. */}
+      {!inLobby && (
+      <>
       {/* Hero Card — entire card is tappable to switch trips */}
       <motion.div variants={itemVariants}>
         <button
@@ -472,20 +530,25 @@ export default function Dashboard() {
           </Card>
         </motion.div>
       )}
+      </>
+      )}
 
-      {/* Floating "Quick Add Expense" FAB */}
-      <motion.button
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        whileTap={{ scale: 0.92 }}
-        onClick={() => setQuickAddOpen(true)}
-        aria-label="Quick add expense"
-        className="fixed bottom-24 right-4 z-[1700] w-14 h-14 rounded-full bg-rose-500 text-white shadow-xl shadow-rose-500/40 flex items-center justify-center active:shadow-lg"
-      >
-        <Plus className="h-6 w-6" strokeWidth={2.5} />
-      </motion.button>
-
-      <QuickAddExpense open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
+      {/* Quick-add FAB only makes sense when there's a trip to attach to. */}
+      {!inLobby && (
+        <>
+          <motion.button
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            whileTap={{ scale: 0.92 }}
+            onClick={() => setQuickAddOpen(true)}
+            aria-label="Quick add expense"
+            className="fixed bottom-24 right-4 z-[1700] w-14 h-14 rounded-full bg-rose-500 text-white shadow-xl shadow-rose-500/40 flex items-center justify-center active:shadow-lg"
+          >
+            <Plus className="h-6 w-6" strokeWidth={2.5} />
+          </motion.button>
+          <QuickAddExpense open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
+        </>
+      )}
     </motion.div>
   )
 }

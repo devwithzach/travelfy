@@ -7,6 +7,7 @@ import {
   MapPin, Camera, Globe, Layers, MoreHorizontal, X, TrendingUp
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
+import { useTrip } from '@/contexts/TripContext'
 
 const mainNav = [
   { to: '/', icon: LayoutDashboard, label: 'Home' },
@@ -33,6 +34,12 @@ const moreItems = [
 export default function BottomNav() {
   const [moreOpen, setMoreOpen] = useState(false)
   const navigate = useNavigate()
+  const { activeTripId } = useTrip()
+  const inLobby = !activeTripId
+  // In lobby mode the user hasn't picked a trip — only the Home and Trips
+  // tabs are valid. Trip-scoped destinations are hidden so they can't be
+  // tapped into an empty trip context.
+  const visibleMain = inLobby ? mainNav.filter(n => n.to === '/' || n.to === '/trips') : mainNav
 
   const handleMoreItem = (to: string) => {
     setMoreOpen(false)
@@ -105,7 +112,7 @@ export default function BottomNav() {
       {/* Bottom Nav Bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-[1500] bg-background/95 backdrop-blur-lg border-t border-border safe-bottom">
         <div className="flex px-2 py-1">
-          {mainNav.map(({ to, icon: Icon, label }) => (
+          {visibleMain.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
@@ -133,24 +140,26 @@ export default function BottomNav() {
             </NavLink>
           ))}
 
-          {/* More button */}
-          <button
-            onClick={() => setMoreOpen(v => !v)}
-            className={cn(
-              'flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-xl transition-all duration-200 relative',
-              moreOpen ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {moreOpen && (
-              <motion.div
-                layoutId="nav-active"
-                className="absolute inset-0 bg-primary/10 rounded-xl"
-                transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
-              />
-            )}
-            <MoreHorizontal className="h-5 w-5 relative z-10" strokeWidth={moreOpen ? 2.5 : 1.8} />
-            <span className="text-[10px] font-medium mt-0.5 relative z-10">More</span>
-          </button>
+          {/* More button — hidden in lobby (drawer contents are all trip-scoped) */}
+          {!inLobby && (
+            <button
+              onClick={() => setMoreOpen(v => !v)}
+              className={cn(
+                'flex flex-col items-center justify-center flex-1 py-1.5 px-1 rounded-xl transition-all duration-200 relative',
+                moreOpen ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {moreOpen && (
+                <motion.div
+                  layoutId="nav-active"
+                  className="absolute inset-0 bg-primary/10 rounded-xl"
+                  transition={{ type: 'spring', bounce: 0.2, duration: 0.4 }}
+                />
+              )}
+              <MoreHorizontal className="h-5 w-5 relative z-10" strokeWidth={moreOpen ? 2.5 : 1.8} />
+              <span className="text-[10px] font-medium mt-0.5 relative z-10">More</span>
+            </button>
+          )}
         </div>
       </nav>
     </>
