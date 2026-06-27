@@ -158,6 +158,13 @@ export interface TripSummary {
   endDate: string
   status: 'upcoming' | 'active' | 'completed'
   coverImage: string
+  /** Optional per-trip aggregates loaded by listTrips. Zero when unset. */
+  counts?: {
+    flights: number
+    hotels: number
+    days: number
+    photos: number
+  }
 }
 
 export interface TripInfo {

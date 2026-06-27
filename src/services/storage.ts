@@ -211,13 +211,30 @@ async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripDa
 export const storageService = {
 
   async listTrips(userId: string): Promise<TripSummary[]> {
+    // Nested foreign-table `count` selects return the aggregate per parent row
+    // in a single round trip. Saves an N+1 fan-out when rendering trip cards.
     const { data } = await supabase
       .from('trips')
-      .select('id, name, destination, start_date, end_date, status, cover_image')
+      .select(`
+        id, name, destination, start_date, end_date, status, cover_image,
+        flights(count),
+        hotels(count),
+        itinerary_days(count),
+        trip_photos(count)
+      `)
       .eq('user_id', userId)
       .order('start_date', { ascending: false })
+
+    const getCount = (rel: unknown): number => {
+      if (Array.isArray(rel) && rel.length > 0 && typeof (rel[0] as { count?: number }).count === 'number') {
+        return (rel[0] as { count: number }).count
+      }
+      return 0
+    }
+
     return (data ?? []).map(r => {
       const v = tripSummaryRowSchema.parse(r)
+      const row = r as Record<string, unknown>
       return {
         id: v.id,
         name: v.name,
@@ -226,6 +243,12 @@ export const storageService = {
         endDate: v.end_date,
         status: v.status,
         coverImage: v.cover_image,
+        counts: {
+          flights: getCount(row.flights),
+          hotels: getCount(row.hotels),
+          days: getCount(row.itinerary_days),
+          photos: getCount(row.trip_photos),
+        },
       }
     })
   },

@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MapPin, Plus, Trash2, Plane, Loader2, CalendarDays } from 'lucide-react'
+import { Plus, Plane, Loader2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTrip } from '@/contexts/TripContext'
 import BottomNav from '@/layouts/BottomNav'
-import { formatDate } from '@/utils/dateUtils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,18 +16,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import type { TripSummary } from '@/types'
-
-const statusGradient: Record<TripSummary['status'], string> = {
-  upcoming: 'from-blue-500 to-indigo-600',
-  active: 'from-emerald-500 to-teal-600',
-  completed: 'from-gray-400 to-gray-500',
-}
-
-const statusLabel: Record<TripSummary['status'], string> = {
-  upcoming: 'Upcoming',
-  active: 'Active',
-  completed: 'Completed',
-}
+import TripCard from '@/components/common/TripCard'
 
 const cardVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -147,53 +135,11 @@ export default function Trips() {
                   exit="exit"
                   layout
                 >
-                  <div
-                    className="relative rounded-2xl overflow-hidden cursor-pointer shadow-md hover:shadow-lg transition-shadow active:scale-[0.98] transition-transform"
-                    onClick={() => handleSelect(trip)}
-                  >
-                    {/* Gradient background */}
-                    <div className={`absolute inset-0 bg-gradient-to-br ${statusGradient[trip.status]} opacity-90`} />
-
-                    {/* Content */}
-                    <div className="relative z-10 p-5 text-white">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium uppercase tracking-wider opacity-80 mb-1">
-                            {statusLabel[trip.status]}
-                          </p>
-                          <h2 className="text-xl font-bold leading-tight truncate">{trip.name || 'Untitled Trip'}</h2>
-                          {trip.destination && (
-                            <div className="flex items-center gap-1 mt-1.5 opacity-90">
-                              <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
-                              <span className="text-sm truncate">{trip.destination}</span>
-                            </div>
-                          )}
-                          {(trip.startDate || trip.endDate) && (
-                            <div className="flex items-center gap-1 mt-1 opacity-80">
-                              <CalendarDays className="h-3.5 w-3.5 flex-shrink-0" />
-                              <span className="text-xs">
-                                {trip.startDate ? formatDate(trip.startDate, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-                                {' → '}
-                                {trip.endDate ? formatDate(trip.endDate, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Delete button */}
-                        <button
-                          className="p-2 rounded-xl bg-white/20 hover:bg-white/30 transition-colors flex-shrink-0"
-                          onClick={e => {
-                            e.stopPropagation()
-                            setDeleteTarget(trip)
-                          }}
-                          aria-label="Delete trip"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <TripCard
+                    trip={trip}
+                    onSelect={() => handleSelect(trip)}
+                    onDelete={() => setDeleteTarget(trip)}
+                  />
                 </motion.div>
               ))}
             </AnimatePresence>

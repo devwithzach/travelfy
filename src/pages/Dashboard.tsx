@@ -15,6 +15,7 @@ import { sumExpenses } from '@/utils/currency'
 import { findInProgressActivity, findNextUpcomingActivity, localDateStr, isActivityDone } from '@/utils/itinerary'
 import { findNextFlight, deriveFlightStatus } from '@/utils/flight'
 import QuickAddExpense from '@/components/common/QuickAddExpense'
+import TripCard from '@/components/common/TripCard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -49,7 +50,7 @@ function timeGreeting(d: Date): string {
 }
 
 export default function Dashboard() {
-  const { trip, updateTrip, activeTripId, trips } = useTrip()
+  const { trip, updateTrip, activeTripId, trips, selectTrip } = useTrip()
   const { user } = useAuth()
   const place = useCurrentPlace()
   const navigate = useNavigate()
@@ -183,20 +184,15 @@ export default function Dashboard() {
               ) : (
                 <div className="space-y-2">
                   {trips.slice(0, 4).map(t => (
-                    <button
+                    <TripCard
                       key={t.id}
-                      onClick={() => navigate('/trips')}
-                      className="w-full flex items-center gap-3 p-3 rounded-xl border border-border hover:bg-accent active:scale-[0.99] transition-all text-left"
-                    >
-                      <div className="w-10 h-10 rounded-xl gradient-brand flex items-center justify-center shrink-0">
-                        <Plane className="h-4 w-4 text-white" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate">{t.name || 'Untitled Trip'}</p>
-                        <p className="text-xs text-muted-foreground truncate">{t.destination || '—'}</p>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                    </button>
+                      trip={t}
+                      compact
+                      onSelect={() => {
+                        selectTrip(t.id)
+                        navigate('/')
+                      }}
+                    />
                   ))}
                   <Button
                     variant="outline"
