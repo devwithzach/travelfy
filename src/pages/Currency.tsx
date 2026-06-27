@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { DollarSign, RefreshCw, ArrowLeftRight } from 'lucide-react'
+import { DollarSign, RefreshCw, ArrowLeftRight, Loader2, Cloud, CloudOff } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import PageHeader from '@/components/common/PageHeader'
 import { Card, CardContent } from '@/components/ui/card'
@@ -8,15 +8,22 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { getRate as sharedGetRate } from '@/utils/currency'
+import { getRate as sharedGetRate, guessLocalCurrency } from '@/utils/currency'
+import { fetchRates } from '@/utils/fxApi'
+import type { CurrencyRate } from '@/types'
 
 const CURRENCIES = ['PHP', 'HKD', 'MOP', 'USD', 'EUR', 'SGD', 'JPY', 'CNY']
 
 export default function Currency() {
   const { trip, updateTrip } = useTrip()
+  const home = trip.settings.homeCurrency || 'PHP'
+  const local = guessLocalCurrency(trip.tripInfo.destination, home)
   const [amount, setAmount] = useState('1000')
-  const [fromCurrency, setFromCurrency] = useState(trip.settings.homeCurrency || 'PHP')
-  const [toCurrency, setToCurrency] = useState('HKD')
+  const [fromCurrency, setFromCurrency] = useState(home)
+  const [toCurrency, setToCurrency] = useState(local !== home ? local : 'HKD')
+  const [fxLoading, setFxLoading] = useState(false)
+  const [fxError, setFxError] = useState<string | null>(null)
+  const [lastFx, setLastFx] = useState<number | null>(null)
 
   const rates = trip.currencyRates
 
@@ -28,28 +35,92 @@ export default function Currency() {
     setToCurrency(fromCurrency)
   }
 
+  // Common conversions are pinned + augmented with the destination's likely
+  // local currency (so a trip to JPY shows PHP↔JPY in the saved rates list).
+  const commonConversions = (() => {
+    const base = [
+      { from: home, to: 'HKD' },
+      { from: home, to: 'MOP' },
+      { from: 'USD', to: home },
+      { from: 'USD', to: 'HKD' },
+    ]
+    if (local !== home && !base.some(p => p.from === home && p.to === local)) {
+      base.unshift({ from: home, to: local })
+    }
+    return base.filter((p, i, arr) => arr.findIndex(q => q.from === p.from && q.to === p.to) === i)
+  })()
+
   const updateRate = (from: string, to: string, newRate: number) => {
     updateTrip(prev => {
       const existing = prev.currencyRates.findIndex(r => r.from === from && r.to === to)
+      const today = new Date().toISOString().split('T')[0]
       if (existing >= 0) {
         const updated = [...prev.currencyRates]
-        updated[existing] = { ...updated[existing], rate: newRate, updatedAt: new Date().toISOString().split('T')[0] }
+        updated[existing] = { ...updated[existing], rate: newRate, updatedAt: today }
         return { ...prev, currencyRates: updated }
       }
       return {
         ...prev,
-        currencyRates: [...prev.currencyRates, { from, to, rate: newRate, updatedAt: new Date().toISOString().split('T')[0] }],
+        currencyRates: [...prev.currencyRates, { from, to, rate: newRate, updatedAt: today }],
       }
     })
   }
 
-  const commonConversions = [
-    { from: 'PHP', to: 'HKD' },
-    { from: 'PHP', to: 'MOP' },
-    { from: 'HKD', to: 'PHP' },
-    { from: 'USD', to: 'PHP' },
-    { from: 'USD', to: 'HKD' },
-  ]
+  // Replace the currency rate list with a fresh batch in a single updateTrip
+  // call (avoids debounce thrashing). Inserts any missing pairs.
+  const applyFetchedRates = (incoming: Array<{ from: string; to: string; rate: number }>) => {
+    const today = new Date().toISOString().split('T')[0]
+    updateTrip(prev => {
+      const byKey = new Map(prev.currencyRates.map(r => [`${r.from}->${r.to}`, r]))
+      for (const r of incoming) {
+        byKey.set(`${r.from}->${r.to}`, { from: r.from, to: r.to, rate: r.rate, updatedAt: today })
+      }
+      return { ...prev, currencyRates: [...byKey.values()] }
+    })
+  }
+
+  const refreshFromApi = async (silent = false) => {
+    if (!silent) setFxLoading(true)
+    setFxError(null)
+    try {
+      const { rates: apiRates, sourceTs } = await fetchRates(home, { force: !silent })
+      const wanted = new Set<string>()
+      commonConversions.forEach(p => { wanted.add(p.from); wanted.add(p.to) })
+      // Also pull anything the user already has rates for.
+      rates.forEach(r => { wanted.add(r.from); wanted.add(r.to) })
+      // Build pairs: home <-> each known currency. UI's getRate handles
+      // direct/inverse/two-hop, so this is enough to convert anywhere.
+      const incoming: CurrencyRate[] = []
+      for (const ccy of wanted) {
+        if (ccy === home) continue
+        const r = apiRates[ccy]
+        if (typeof r === 'number' && r > 0) {
+          incoming.push({ from: home, to: ccy, rate: r, updatedAt: '' })
+        }
+      }
+      if (incoming.length === 0) {
+        setFxError(`No live rates available for ${home}.`)
+      } else {
+        applyFetchedRates(incoming)
+        setLastFx(sourceTs)
+      }
+    } catch (err) {
+      setFxError(err instanceof Error ? err.message : 'Could not reach FX provider')
+    } finally {
+      if (!silent) setFxLoading(false)
+    }
+  }
+
+  // Auto-fetch on first mount when no rates exist for the common conversions.
+  // Silent: no spinner, errors are swallowed (user can retry manually).
+  const autoFetched = useRef(false)
+  useEffect(() => {
+    if (autoFetched.current) return
+    autoFetched.current = true
+    const missing = commonConversions.some(p => sharedGetRate(rates, p.from, p.to) === null)
+    if (missing) refreshFromApi(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <div>
@@ -135,8 +206,25 @@ export default function Currency() {
             <div className="flex items-center gap-2 mb-3">
               <RefreshCw className="h-4 w-4 text-muted-foreground" />
               <p className="text-sm font-semibold">Saved Exchange Rates</p>
-              <span className="text-xs text-muted-foreground ml-auto">Tap rate to edit</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 ml-auto text-xs gap-1.5"
+                onClick={() => refreshFromApi(false)}
+                disabled={fxLoading}
+              >
+                {fxLoading
+                  ? <><Loader2 className="h-3 w-3 animate-spin" /> Fetching…</>
+                  : <><Cloud className="h-3 w-3" /> Update from web</>
+                }
+              </Button>
             </div>
+            {(lastFx || fxError) && (
+              <p className={`text-[10px] mb-2 flex items-center gap-1 ${fxError ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                {fxError ? <CloudOff className="h-3 w-3" /> : <Cloud className="h-3 w-3" />}
+                {fxError ?? `Live rates updated ${new Date(lastFx!).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`}
+              </p>
+            )}
             <div className="space-y-2">
               {commonConversions.map(({ from, to }) => {
                 const r = sharedGetRate(rates, from, to)
@@ -164,7 +252,7 @@ export default function Currency() {
               })}
             </div>
             <p className="text-xs text-muted-foreground mt-3">
-              💡 Rates are stored offline. Update manually based on current exchange rates.
+              💡 Tap “Update from web” to pull today’s rates from open.er-api.com, or tap a value to override manually. Rates are cached offline for your trip.
             </p>
           </CardContent>
         </Card>

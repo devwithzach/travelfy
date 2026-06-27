@@ -67,6 +67,27 @@ function clearLegacyDone(tripId: string) {
   try { localStorage.removeItem(DONE_STORAGE_PREFIX + tripId) } catch { /* noop */ }
 }
 
+// Quick-fill templates for the Add Activity dialog. Tapping a template fills
+// in type + title + a sensible duration (description left blank for the user).
+const ACTIVITY_TEMPLATES: Array<{
+  label: string
+  type: ItineraryActivity['type']
+  title: string
+  emoji: string
+}> = [
+  { label: 'Flight',       type: 'transport',  title: 'Flight',                  emoji: '✈️' },
+  { label: 'Check-in',     type: 'hotel',      title: 'Hotel check-in',          emoji: '🏨' },
+  { label: 'Check-out',    type: 'hotel',      title: 'Hotel check-out',         emoji: '🛎️' },
+  { label: 'Breakfast',    type: 'meal',       title: 'Breakfast',               emoji: '🥐' },
+  { label: 'Lunch',        type: 'meal',       title: 'Lunch',                   emoji: '🥢' },
+  { label: 'Dinner',       type: 'meal',       title: 'Dinner',                  emoji: '🍽️' },
+  { label: 'Sightseeing',  type: 'attraction', title: 'Sightseeing',             emoji: '📸' },
+  { label: 'Tour',         type: 'attraction', title: 'Guided tour',             emoji: '🗺️' },
+  { label: 'Shopping',     type: 'shopping',   title: 'Shopping',                emoji: '🛍️' },
+  { label: 'Transfer',     type: 'transport',  title: 'Transfer',                emoji: '🚐' },
+  { label: 'Free time',    type: 'free',       title: 'Free time',               emoji: '🌴' },
+]
+
 const defaultActivity = (): ItineraryActivity => ({
   id: crypto.randomUUID(),
   time: '',
@@ -587,6 +608,26 @@ export default function Timeline() {
           </DialogHeader>
           {editingAct && (
             <div className="grid gap-3">
+              {/* Quick templates — only when adding new (no title yet). */}
+              {editingAct.activity.title === '' && (
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Quick add</Label>
+                  <div className="flex gap-1.5 flex-wrap mt-1.5">
+                    {ACTIVITY_TEMPLATES.map(t => (
+                      <button
+                        key={t.label}
+                        onClick={() => setEditingAct(prev => prev ? ({
+                          ...prev,
+                          activity: { ...prev.activity, type: t.type, title: t.title },
+                        }) : prev)}
+                        className="px-2.5 py-1.5 rounded-xl border border-border bg-background hover:bg-accent active:scale-95 transition-all text-xs font-medium flex items-center gap-1"
+                      >
+                        <span aria-hidden>{t.emoji}</span> {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground uppercase tracking-wide">Time</Label>
