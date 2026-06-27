@@ -31,12 +31,20 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
 }
 
-// Friendly first name from a Supabase user record. Falls back to "Traveler".
-function deriveName(email: string | null | undefined, fullName: string | null | undefined): string {
-  if (fullName?.trim()) return fullName.split(/\s+/)[0]
+// Friendly first name. Priority:
+//   1. The trip's "Traveler Name" setting (editable from Settings page)
+//   2. Supabase user_metadata.full_name (settable via auth)
+//   3. Best-effort parse of the email local-part
+//   4. "Traveler"
+function deriveName(
+  travelerName: string | null | undefined,
+  fullName: string | null | undefined,
+  email: string | null | undefined,
+): string {
+  if (travelerName?.trim()) return travelerName.trim().split(/\s+/)[0]
+  if (fullName?.trim()) return fullName.trim().split(/\s+/)[0]
   if (!email) return 'Traveler'
   const local = email.split('@')[0]
-  // Strip digits and split on common separators.
   const first = local.replace(/\d+/g, '').split(/[._-]/)[0]
   if (!first) return 'Traveler'
   return first.charAt(0).toUpperCase() + first.slice(1)
@@ -52,7 +60,7 @@ function timeGreeting(d: Date): string {
 
 export default function Dashboard() {
   const { trip, updateTrip, activeTripId, trips, selectTrip } = useTrip()
-  const { user } = useAuth()
+  const { user, updateDisplayName } = useAuth()
   const place = useCurrentPlace()
   const navigate = useNavigate()
   const inLobby = !activeTripId
@@ -100,7 +108,29 @@ export default function Dashboard() {
   const [quickAddOpen, setQuickAddOpen] = useState(false)
 
   const greeting = timeGreeting(now)
-  const name = deriveName(user?.email, (user?.user_metadata?.full_name as string | undefined) ?? null)
+  const name = deriveName(
+    settings.travelerName,
+    (user?.user_metadata?.full_name as string | undefined) ?? null,
+    user?.email,
+  )
+
+  // Inline edit for the greeting name.
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+  const startEditName = () => {
+    setNameDraft(name === 'Traveler' ? '' : name)
+    setEditingName(true)
+  }
+  const saveName = async () => {
+    const v = nameDraft.trim()
+    if (!v) { setEditingName(false); return }
+    await updateDisplayName(v)
+    // Also write to the active trip's traveler setting so legacy reads pick it up immediately.
+    if (activeTripId) {
+      updateTrip(prev => ({ ...prev, settings: { ...prev.settings, travelerName: v } }))
+    }
+    setEditingName(false)
+  }
 
   const quickActions = [
     { label: 'Flights', icon: Plane, to: '/flights', color: 'bg-blue-500' },
@@ -125,7 +155,31 @@ export default function Dashboard() {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-xs text-muted-foreground uppercase tracking-widest">{greeting}</p>
-            <h1 className="text-2xl font-bold mt-0.5 truncate">{name} 👋</h1>
+            {editingName ? (
+              <form
+                onSubmit={e => { e.preventDefault(); saveName() }}
+                className="mt-0.5 flex items-center gap-2"
+              >
+                <input
+                  autoFocus
+                  value={nameDraft}
+                  onChange={e => setNameDraft(e.target.value)}
+                  onBlur={saveName}
+                  placeholder="Your name"
+                  maxLength={32}
+                  className="text-2xl font-bold bg-transparent border-b-2 border-primary outline-none w-full min-w-0"
+                />
+              </form>
+            ) : (
+              <button
+                onClick={startEditName}
+                aria-label="Edit your name"
+                title="Tap to change your name"
+                className="text-2xl font-bold mt-0.5 truncate max-w-full text-left active:scale-95 transition-transform"
+              >
+                {name} 👋
+              </button>
+            )}
           </div>
           <div className="text-right shrink-0">
             <p className="text-2xl font-bold tabular-nums leading-none">

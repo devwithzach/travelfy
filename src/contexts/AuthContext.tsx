@@ -9,6 +9,7 @@ interface AuthContextValue {
   signUp: (email: string, password: string) => Promise<{ error: string | null }>
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
+  updateDisplayName: (name: string) => Promise<{ error: string | null }>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -47,8 +48,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut()
   }
 
+  // Persist a friendly display name on the Supabase auth user (user_metadata.full_name).
+  // Used by Dashboard to greet the user; survives across devices via auth, not per-trip.
+  const updateDisplayName = async (name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) return { error: 'Name cannot be empty' }
+    const { data, error } = await supabase.auth.updateUser({ data: { full_name: trimmed } })
+    if (error) return { error: error.message }
+    if (data.user) setUser(data.user)
+    return { error: null }
+  }
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut, updateDisplayName }}>
       {children}
     </AuthContext.Provider>
   )
