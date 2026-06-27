@@ -14,6 +14,8 @@ interface TripContextValue {
   error: string | null
   clearError: () => void
   selectTrip: (id: string) => void
+  /** Drop the active trip without deleting it — returns to the lobby. */
+  exitTrip: () => void
   createNewTrip: (info: { name: string; destination: string; startDate: string; endDate: string; description: string }) => Promise<string>
   deleteTripById: (id: string) => Promise<void>
   updateTrip: (updater: (prev: TripData) => TripData) => void
@@ -70,6 +72,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   const selectTrip = useCallback((id: string) => {
     localStorage.setItem('activeTripId', id)
     setActiveTripId(id)
+  }, [])
+
+  const exitTrip = useCallback(() => {
+    localStorage.removeItem('activeTripId')
+    setActiveTripId(null)
+    setTrip(createEmptyTrip())
   }, [])
 
   const createNewTrip = useCallback(async (info: { name: string; destination: string; startDate: string; endDate: string; description: string }) => {
@@ -171,7 +179,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   return (
     <TripContext.Provider value={{
       trip, trips, activeTripId, loading, tripLoading, error, clearError,
-      selectTrip, createNewTrip, deleteTripById,
+      selectTrip, exitTrip, createNewTrip, deleteTripById,
       updateTrip, resetTrip, exportTrip, importTrip, seedSampleTrip,
     }}>
       {children}

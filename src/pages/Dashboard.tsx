@@ -16,6 +16,7 @@ import { findInProgressActivity, findNextUpcomingActivity, localDateStr, isActiv
 import { findNextFlight, deriveFlightStatus } from '@/utils/flight'
 import QuickAddExpense from '@/components/common/QuickAddExpense'
 import TripCard from '@/components/common/TripCard'
+import ProfileSheet from '@/components/common/ProfileSheet'
 import { computeExpiryAlerts } from '@/utils/expiry'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -60,7 +61,7 @@ function timeGreeting(d: Date): string {
 
 export default function Dashboard() {
   const { trip, updateTrip, activeTripId, trips, selectTrip } = useTrip()
-  const { user, updateDisplayName } = useAuth()
+  const { user } = useAuth()
   const place = useCurrentPlace()
   const navigate = useNavigate()
   const inLobby = !activeTripId
@@ -114,23 +115,9 @@ export default function Dashboard() {
     user?.email,
   )
 
-  // Inline edit for the greeting name.
-  const [editingName, setEditingName] = useState(false)
-  const [nameDraft, setNameDraft] = useState('')
-  const startEditName = () => {
-    setNameDraft(name === 'Traveler' ? '' : name)
-    setEditingName(true)
-  }
-  const saveName = async () => {
-    const v = nameDraft.trim()
-    if (!v) { setEditingName(false); return }
-    await updateDisplayName(v)
-    // Also write to the active trip's traveler setting so legacy reads pick it up immediately.
-    if (activeTripId) {
-      updateTrip(prev => ({ ...prev, settings: { ...prev.settings, travelerName: v } }))
-    }
-    setEditingName(false)
-  }
+  // Profile sheet (avatar tap on greeting opens it).
+  const [profileOpen, setProfileOpen] = useState(false)
+  const avatarInitial = (name.charAt(0) || user?.email?.charAt(0) || '?').toUpperCase()
 
   const quickActions = [
     { label: 'Flights', icon: Plane, to: '/flights', color: 'bg-blue-500' },
@@ -153,34 +140,21 @@ export default function Dashboard() {
       {/* Personalized greeting + current location + local time */}
       <motion.div variants={itemVariants}>
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground uppercase tracking-widest">{greeting}</p>
-            {editingName ? (
-              <form
-                onSubmit={e => { e.preventDefault(); saveName() }}
-                className="mt-0.5 flex items-center gap-2"
-              >
-                <input
-                  autoFocus
-                  value={nameDraft}
-                  onChange={e => setNameDraft(e.target.value)}
-                  onBlur={saveName}
-                  placeholder="Your name"
-                  maxLength={32}
-                  className="text-2xl font-bold bg-transparent border-b-2 border-primary outline-none w-full min-w-0"
-                />
-              </form>
-            ) : (
-              <button
-                onClick={startEditName}
-                aria-label="Edit your name"
-                title="Tap to change your name"
-                className="text-2xl font-bold mt-0.5 truncate max-w-full text-left active:scale-95 transition-transform"
-              >
+          <button
+            onClick={() => setProfileOpen(true)}
+            aria-label="Edit profile"
+            className="flex items-center gap-3 min-w-0 flex-1 text-left active:scale-[0.98] transition-transform"
+          >
+            <div className="w-11 h-11 rounded-2xl gradient-brand flex items-center justify-center text-white text-base font-bold shrink-0">
+              {avatarInitial}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-muted-foreground uppercase tracking-widest">{greeting}</p>
+              <p className="text-2xl font-bold mt-0.5 truncate max-w-full leading-tight">
                 {name} 👋
-              </button>
-            )}
-          </div>
+              </p>
+            </div>
+          </button>
           <div className="text-right shrink-0">
             <p className="text-2xl font-bold tabular-nums leading-none">
               {now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
@@ -645,6 +619,12 @@ export default function Dashboard() {
           <QuickAddExpense open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
         </>
       )}
+
+      <ProfileSheet
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        initialName={settings.travelerName}
+      />
     </motion.div>
   )
 }
