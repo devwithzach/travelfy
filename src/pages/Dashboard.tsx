@@ -18,6 +18,7 @@ import QuickAddExpense from '@/components/common/QuickAddExpense'
 import TripCard from '@/components/common/TripCard'
 import ProfileSheet from '@/components/common/ProfileSheet'
 import { computeExpiryAlerts } from '@/utils/expiry'
+import { cn } from '@/utils/cn'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -668,6 +669,29 @@ function TodayPreview({ now }: { now: Date }) {
 
   if (!todayItinerary) return null
 
+  // Sort by time so the chronological order is correct regardless of how the
+  // rows came back from the DB.
+  const sortedActivities = [...todayItinerary.activities].sort((a, b) => a.time.localeCompare(b.time))
+
+  // Find the activity that's currently in progress (most-recently-started undone).
+  // Used to highlight the row and to dim earlier ones automatically.
+  const nowMs = now.getTime()
+  let inProgressId: string | null = null
+  for (const a of sortedActivities) {
+    if (a.done) continue
+    if (!a.time) { inProgressId = inProgressId ?? a.id; continue }
+    const ts = new Date(`${today}T${a.time}`).getTime()
+    if (!Number.isNaN(ts) && ts <= nowMs) inProgressId = a.id
+  }
+
+  const visible = sortedActivities.slice(0, 4)
+  const doneCount = sortedActivities.filter(a => {
+    const later = sortedActivities
+      .filter(x => x.id !== a.id && x.time && x.time > (a.time || ''))
+      .map(x => x.time)
+    return isActivityDone(today, a.time, !!a.done, now, later)
+  }).length
+
   return (
     <Card>
       <CardContent className="p-4">
@@ -675,26 +699,48 @@ function TodayPreview({ now }: { now: Date }) {
           <span className="text-sm font-semibold flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-emerald-600" />
             Today's Plan
+            <span className="text-[10px] font-bold text-muted-foreground tabular-nums">
+              {doneCount}/{sortedActivities.length}
+            </span>
           </span>
           <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => navigate('/timeline')}>
             Full timeline
           </Button>
         </div>
         <div className="space-y-2">
-          {todayItinerary.activities.slice(0, 4).map(act => {
-            const done = isActivityDone(today, act.time, !!act.done, now)
+          {visible.map(act => {
+            // Apply the day-aware rule: an activity is done if its own time
+            // passed OR any later same-day activity has already started.
+            const later = sortedActivities
+              .filter(x => x.id !== act.id && x.time && x.time > (act.time || ''))
+              .map(x => x.time)
+            const done = isActivityDone(today, act.time, !!act.done, now, later)
+            const isNow = !done && act.id === inProgressId
             return (
-              <div key={act.id} className={`flex items-center gap-3 ${done ? 'opacity-50' : ''}`}>
+              <div
+                key={act.id}
+                className={cn(
+                  'flex items-center gap-3 rounded-lg -mx-1 px-1 py-0.5 transition-all',
+                  done && 'opacity-50',
+                  isNow && 'bg-primary/5 ring-1 ring-primary/30',
+                )}
+              >
                 <div className="text-xs text-muted-foreground w-14 shrink-0 font-mono tabular-nums">
                   {act.time ? formatTime(act.time) : '—'}
                 </div>
-                <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${done ? 'bg-emerald-500' : 'bg-primary'}`} />
-                <div className={`text-sm font-medium truncate ${done ? 'line-through' : ''}`}>{act.title}</div>
+                <div className={cn(
+                  'h-1.5 w-1.5 rounded-full shrink-0',
+                  done ? 'bg-emerald-500' : isNow ? 'bg-primary animate-pulse' : 'bg-primary',
+                )} />
+                <div className={cn('text-sm font-medium truncate flex-1', done && 'line-through')}>{act.title}</div>
+                {isNow && (
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-primary shrink-0">Now</span>
+                )}
               </div>
             )
           })}
-          {todayItinerary.activities.length > 4 && (
-            <p className="text-xs text-primary pl-[70px]">+{todayItinerary.activities.length - 4} more</p>
+          {sortedActivities.length > 4 && (
+            <p className="text-xs text-primary pl-[70px]">+{sortedActivities.length - 4} more</p>
           )}
         </div>
       </CardContent>
