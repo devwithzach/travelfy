@@ -21,6 +21,7 @@ import Currency from '@/pages/Currency'
 import Settings from '@/pages/Settings'
 import MapExplorer from '@/pages/MapExplorer'
 import Photos from '@/pages/Photos'
+import Stats from '@/pages/Stats'
 import InstallPrompt from '@/components/common/InstallPrompt'
 import PWAUpdatePrompt from '@/components/common/PWAUpdatePrompt'
 import { motion } from 'framer-motion'
@@ -70,6 +71,7 @@ function AppRoutes() {
           <Route path="/links" element={<QuickLinks />} />
           <Route path="/map" element={<MapExplorer />} />
           <Route path="/photos" element={<Photos />} />
+          <Route path="/stats" element={<Stats />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
