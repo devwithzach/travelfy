@@ -172,11 +172,19 @@ export default function Dashboard() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 mt-2 text-xs">
-          <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
-          {place.loading ? (
-            <span className="text-muted-foreground opacity-60">Finding you…</span>
-          ) : place.country ? (
+        {/* Location row only renders once we have a result. While the
+            geolocation + reverse-geocode is in flight we show nothing —
+            the prior "Finding you…" / "Location unavailable" text felt
+            noisy on every page load. Permission-denied / unsupported also
+            stay silent (the user can re-enable in browser settings; no need
+            to nag from here). */}
+        {!place.loading && place.country && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-2 mt-2 text-xs"
+          >
+            <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
             <span className="truncate">
               <span className="text-muted-foreground">Currently in </span>
               {place.region && (
@@ -190,14 +198,8 @@ export default function Dashboard() {
                 <span className="ml-1" aria-hidden>{countryFlag(place.countryCode)}</span>
               )}
             </span>
-          ) : place.permissionState === 'denied' ? (
-            <span className="text-muted-foreground opacity-60">Location off · enable in browser to see where you are</span>
-          ) : place.permissionState === 'unsupported' ? (
-            <span className="text-muted-foreground opacity-60">Location unavailable on this device</span>
-          ) : (
-            <span className="text-muted-foreground opacity-60">Location unavailable</span>
-          )}
-        </div>
+          </motion.div>
+        )}
       </motion.div>
 
       {/* One-time prompt: greeting fell back to email-parsing because no real
