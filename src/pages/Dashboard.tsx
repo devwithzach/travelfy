@@ -14,6 +14,7 @@ import { getDaysUntil, formatDate, formatShortDate, getTripProgress, getTripStat
 import { sumExpenses } from '@/utils/currency'
 import { findInProgressActivity, findNextUpcomingActivity, localDateStr, isActivityDone } from '@/utils/itinerary'
 import { findNextFlight, deriveFlightStatus } from '@/utils/flight'
+import { findActiveOrNextHotel } from '@/utils/hotel'
 import QuickAddExpense from '@/components/common/QuickAddExpense'
 import TripCard from '@/components/common/TripCard'
 import ProfileSheet from '@/components/common/ProfileSheet'
@@ -95,6 +96,7 @@ export default function Dashboard() {
 
   const nextFlight = findNextFlight(flights, now)
   const nextFlightStatus = nextFlight ? deriveFlightStatus(nextFlight, now) : null
+  const hotelStatus = findActiveOrNextHotel(hotels, now)
   const checkedCount = checklist.filter(c => c.checked).length
   const totalBudget = settings.totalBudget
   const { total: spentAmount } = sumExpenses(trip.currencyRates, expenses, settings.homeCurrency)
@@ -501,6 +503,64 @@ export default function Dashboard() {
                 </div>
                 <div className="mt-2 text-center">
                   <p className="text-xs text-muted-foreground">{formatDate(nextFlight.departureDate, { weekday: 'short', month: 'short', day: 'numeric' })}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </button>
+        </motion.div>
+      )}
+
+      {/* Hotel check-in / check-out countdown */}
+      {hotelStatus && (
+        <motion.div variants={itemVariants}>
+          <button onClick={() => navigate('/hotels')} className="w-full text-left">
+            <Card className="hover:shadow-md transition-shadow active:scale-[0.99]">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-violet-100 dark:bg-violet-900/30">
+                      <Building2 className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+                    </div>
+                    <span className="text-sm font-semibold">
+                      {hotelStatus.phase === 'staying' ? 'Currently staying' : 'Next hotel'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    <span className="text-xs font-mono">{hotelStatus.hotel.checkIn} → {hotelStatus.hotel.checkOut}</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </div>
+                </div>
+                <p className="font-bold text-base leading-tight">{hotelStatus.hotel.name}</p>
+                {hotelStatus.hotel.address && (
+                  <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1 truncate">
+                    <MapPin className="h-3 w-3 shrink-0" /> {hotelStatus.hotel.address}
+                  </p>
+                )}
+                <div className="mt-3 flex items-center gap-2">
+                  <div className={cn(
+                    'flex-1 rounded-xl p-2.5 flex items-center gap-2',
+                    hotelStatus.phase === 'staying'
+                      ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400'
+                      : 'bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400',
+                  )}>
+                    <Clock className="h-3.5 w-3.5 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">
+                        {hotelStatus.phase === 'staying' ? 'Check-out' : 'Check-in'}
+                      </p>
+                      <p className="text-sm font-bold leading-tight">{hotelStatus.label}</p>
+                    </div>
+                  </div>
+                  {hotelStatus.hotel.phone && (
+                    <a
+                      href={`tel:${hotelStatus.hotel.phone.replace(/\s+/g, '')}`}
+                      onClick={e => e.stopPropagation()}
+                      aria-label={`Call ${hotelStatus.hotel.name}`}
+                      className="w-10 h-10 rounded-xl bg-muted hover:bg-accent flex items-center justify-center shrink-0"
+                    >
+                      <span className="text-lg" aria-hidden>📞</span>
+                    </a>
+                  )}
                 </div>
               </CardContent>
             </Card>
