@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Loader2 } from 'lucide-react'
+import { X, Loader2, Camera, Trash2 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
+import { useAuth } from '@/contexts/AuthContext'
 import type { Expense } from '@/types'
 import { guessLocalCurrency } from '@/utils/currency'
+import { uploadReceipt } from '@/utils/receiptUpload'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,13 +21,34 @@ interface Props {
 
 export default function QuickAddExpense({ open, onClose }: Props) {
   const { trip, updateTrip } = useTrip()
+  const { user } = useAuth()
   const defaultCurrency = guessLocalCurrency(trip.tripInfo.destination, trip.settings.homeCurrency)
 
   const [amount, setAmount] = useState('')
   const [currency, setCurrency] = useState(defaultCurrency)
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState<Expense['category']>('food')
+  const [receiptUrl, setReceiptUrl] = useState('')
+  const [receiptUploading, setReceiptUploading] = useState(false)
+  const [receiptError, setReceiptError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const receiptInputRef = useRef<HTMLInputElement>(null)
+
+  const handleReceiptPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !user) return
+    setReceiptError(null)
+    setReceiptUploading(true)
+    try {
+      const { url } = await uploadReceipt(file, user.id)
+      setReceiptUrl(url)
+    } catch (err) {
+      setReceiptError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setReceiptUploading(false)
+    }
+  }
 
   // When the sheet opens fresh (no in-flight input), reset currency to the
   // current best guess for the active trip. Avoids stale state across trips.
@@ -39,6 +62,8 @@ export default function QuickAddExpense({ open, onClose }: Props) {
     setTitle('')
     setCategory('food')
     setCurrency(defaultCurrency)
+    setReceiptUrl('')
+    setReceiptError(null)
   }
 
   const save = () => {
@@ -53,6 +78,7 @@ export default function QuickAddExpense({ open, onClose }: Props) {
       category,
       date: new Date().toISOString().split('T')[0],
       notes: '',
+      receiptUrl: receiptUrl || undefined,
     }
     updateTrip(prev => ({ ...prev, expenses: [expense, ...prev.expenses] }))
     setSaving(false)
@@ -136,8 +162,53 @@ export default function QuickAddExpense({ open, onClose }: Props) {
               value={title}
               onChange={e => setTitle(e.target.value)}
               placeholder="Dinner at Tim Ho Wan"
-              className="mt-1.5 mb-4"
+              className="mt-1.5 mb-3"
             />
+
+            {/* Receipt photo (optional) */}
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Receipt (optional)</Label>
+            <div className="mt-1.5 mb-4">
+              {receiptUrl ? (
+                <div className="relative inline-block">
+                  <img
+                    src={receiptUrl}
+                    alt="Receipt"
+                    className="h-24 rounded-xl border border-border object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setReceiptUrl('')}
+                    aria-label="Remove receipt"
+                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-destructive text-white flex items-center justify-center shadow"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => receiptInputRef.current?.click()}
+                  disabled={receiptUploading}
+                  className="w-full h-20 rounded-xl border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 flex items-center justify-center gap-2 text-sm text-muted-foreground transition-colors disabled:opacity-60"
+                >
+                  {receiptUploading
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading…</>
+                    : <><Camera className="h-4 w-4" /> Tap to attach receipt</>
+                  }
+                </button>
+              )}
+              <input
+                ref={receiptInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleReceiptPick}
+              />
+              {receiptError && (
+                <p className="text-xs text-destructive mt-1.5" role="alert">{receiptError}</p>
+              )}
+            </div>
 
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>

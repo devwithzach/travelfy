@@ -84,6 +84,7 @@ export const expenseRowSchema = z.object({
   category: z.enum(['food', 'transport', 'shopping', 'hotel', 'activities', 'other']).catch('other'),
   date: str(),
   notes: str(),
+  receipt_url: str(),
 })
 
 export const documentRowSchema = z.object({

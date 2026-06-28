@@ -65,6 +65,7 @@ function mapExpense(r: unknown): Expense {
   return {
     id: v.id, title: v.title, amount: v.amount, currency: v.currency,
     category: v.category, date: v.date, notes: v.notes,
+    receiptUrl: v.receipt_url,
   }
 }
 
@@ -361,6 +362,7 @@ export const storageService = {
         id: e.id, trip_id: tripId, user_id: userId,
         title: e.title, amount: e.amount, currency: e.currency,
         category: e.category, date: e.date, notes: e.notes,
+        receipt_url: e.receiptUrl ?? '',
       }))),
 
       // Documents

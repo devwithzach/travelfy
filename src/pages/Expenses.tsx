@@ -41,6 +41,7 @@ export default function Expenses() {
   const { trip, updateTrip } = useTrip()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)
+  const [receiptView, setReceiptView] = useState<string | null>(null)
 
   const { expenses, settings, currencyRates } = trip
   const totalBudget = settings.totalBudget
@@ -163,12 +164,22 @@ export default function Expenses() {
                     <Card>
                       <CardContent className="p-3">
                         <div className="flex items-center gap-3">
-                          <div
-                            className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0"
-                            style={{ backgroundColor: CATEGORY_CONFIG[expense.category].color }}
-                          >
-                            {expense.category.slice(0, 2).toUpperCase()}
-                          </div>
+                          {expense.receiptUrl ? (
+                            <button
+                              onClick={() => setReceiptView(expense.receiptUrl ?? null)}
+                              aria-label="View receipt"
+                              className="w-10 h-10 rounded-xl overflow-hidden shrink-0 ring-2 ring-offset-2 ring-offset-background ring-border hover:ring-primary active:scale-95 transition-all"
+                            >
+                              <img src={expense.receiptUrl} alt="Receipt" className="w-full h-full object-cover" />
+                            </button>
+                          ) : (
+                            <div
+                              className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0"
+                              style={{ backgroundColor: CATEGORY_CONFIG[expense.category].color }}
+                            >
+                              {expense.category.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-sm truncate">{expense.title}</p>
                             <div className="flex items-center gap-2 mt-0.5">
@@ -336,6 +347,21 @@ export default function Expenses() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Receipt lightbox — tap thumbnail on an expense row to open. */}
+      {receiptView && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setReceiptView(null)}
+          className="fixed inset-0 z-[1950] bg-black/90 flex items-center justify-center p-4"
+          role="dialog"
+          aria-label="Receipt"
+        >
+          <img src={receiptView} alt="Receipt" className="max-w-full max-h-full rounded-xl shadow-2xl" />
+        </motion.div>
+      )}
     </div>
   )
 }

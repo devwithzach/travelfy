@@ -72,6 +72,8 @@ export interface Expense {
   category: 'food' | 'transport' | 'shopping' | 'hotel' | 'activities' | 'other'
   date: string
   notes: string
+  /** Optional public URL of a receipt photo stored in trip-photos/receipts/. */
+  receiptUrl?: string
 }
 
 export interface Document {

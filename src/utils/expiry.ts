@@ -36,14 +36,18 @@ export function computeExpiryAlerts(
   trip: TripInfo,
   now: Date = new Date(),
 ): ExpiryAlert[] {
-  now.setHours(0, 0, 0, 0)
+  // Important: do NOT mutate the caller's `now` Date — callers (Dashboard)
+  // store it in React state and use it to render the current time. Use a
+  // midnight-anchored clone for day-bucket math instead.
+  const today = new Date(now)
+  today.setHours(0, 0, 0, 0)
   const alerts: ExpiryAlert[] = []
   const tripEnd = parse(trip.endDate)
 
   // ── Passport ──
   const passportExp = parse(passport?.expiryDate)
   if (passportExp) {
-    const days = daysBetween(now, passportExp)
+    const days = daysBetween(today, passportExp)
     if (days < 0) {
       alerts.push({
         id: 'passport-expired',
@@ -85,7 +89,7 @@ export function computeExpiryAlerts(
     }
     const visaExp = parse(v.expiryDate)
     if (!visaExp) continue
-    const daysToVisa = daysBetween(now, visaExp)
+    const daysToVisa = daysBetween(today, visaExp)
     if (daysToVisa < 0) {
       alerts.push({
         id: `visa-past-${v.id}`,
