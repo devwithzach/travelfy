@@ -19,6 +19,7 @@ import TripCard from '@/components/common/TripCard'
 import ProfileSheet from '@/components/common/ProfileSheet'
 import { computeExpiryAlerts } from '@/utils/expiry'
 import { cn } from '@/utils/cn'
+import type { TripData } from '@/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -603,7 +604,7 @@ export default function Dashboard() {
 
       {/* Today's Itinerary Preview */}
       <motion.div variants={itemVariants}>
-        <TodayPreview now={now} />
+        <TodayPreview now={now} updateTrip={updateTrip} />
       </motion.div>
 
       {/* Tour Notes */}
@@ -659,9 +660,19 @@ export default function Dashboard() {
   )
 }
 
-function TodayPreview({ now }: { now: Date }) {
+function TodayPreview({ now, updateTrip }: { now: Date; updateTrip: (u: (prev: TripData) => TripData) => void }) {
   const { trip } = useTrip()
   const navigate = useNavigate()
+
+  const toggleDone = (dayId: string, actId: string) => {
+    updateTrip(prev => ({
+      ...prev,
+      itinerary: prev.itinerary.map(d => d.id !== dayId ? d : {
+        ...d,
+        activities: d.activities.map(a => a.id !== actId ? a : { ...a, done: !a.done }),
+      }),
+    }))
+  }
 
   // Local-timezone date string so we match Timeline's logic exactly.
   const today = localDateStr(now)
@@ -717,26 +728,34 @@ function TodayPreview({ now }: { now: Date }) {
             const done = isActivityDone(today, act.time, !!act.done, now, later)
             const isNow = !done && act.id === inProgressId
             return (
-              <div
+              <button
                 key={act.id}
+                onClick={() => toggleDone(todayItinerary.id, act.id)}
+                aria-label={done ? `Mark "${act.title}" not done` : `Mark "${act.title}" done`}
+                title={done ? 'Tap to undo' : 'Tap to mark done'}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg -mx-1 px-1 py-0.5 transition-all',
+                  'w-full flex items-center gap-3 rounded-lg -mx-1 px-1 py-1 text-left transition-all active:scale-[0.99]',
                   done && 'opacity-50',
                   isNow && 'bg-primary/5 ring-1 ring-primary/30',
+                  !done && !isNow && 'hover:bg-accent/40',
                 )}
               >
                 <div className="text-xs text-muted-foreground w-14 shrink-0 font-mono tabular-nums">
                   {act.time ? formatTime(act.time) : '—'}
                 </div>
-                <div className={cn(
-                  'h-1.5 w-1.5 rounded-full shrink-0',
-                  done ? 'bg-emerald-500' : isNow ? 'bg-primary animate-pulse' : 'bg-primary',
-                )} />
+                {done ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" strokeWidth={3} />
+                ) : (
+                  <div className={cn(
+                    'h-3.5 w-3.5 rounded-full border-2 shrink-0',
+                    isNow ? 'border-primary animate-pulse' : 'border-muted-foreground/40',
+                  )} />
+                )}
                 <div className={cn('text-sm font-medium truncate flex-1', done && 'line-through')}>{act.title}</div>
                 {isNow && (
                   <span className="text-[9px] font-bold uppercase tracking-widest text-primary shrink-0">Now</span>
                 )}
-              </div>
+              </button>
             )
           })}
           {sortedActivities.length > 4 && (
