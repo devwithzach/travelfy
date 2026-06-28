@@ -167,12 +167,17 @@ export default function Dashboard() {
               </p>
             </div>
           </button>
-          <div className="text-right shrink-0">
+          <div className="text-right shrink-0" key={now.getTime()}>
+            {/* Use a fresh Date for the display itself so callers that
+                accidentally mutate the shared `now` (Date is a reference!)
+                can't snap the clock. The interval-driven `now` state still
+                triggers the re-render every 60s; `key` forces the subtree
+                to remount, sidestepping any stale React reconciliation. */}
             <p className="text-2xl font-bold tabular-nums leading-none">
-              {now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+              {new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
             </p>
             <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">
-              {now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
+              {new Date().toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
             </p>
           </div>
         </div>
