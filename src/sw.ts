@@ -4,10 +4,15 @@ import { registerRoute, NavigationRoute } from 'workbox-routing'
 import { CacheFirst, NetworkFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
+import { clientsClaim } from 'workbox-core'
 
 declare const self: ServiceWorkerGlobalScope
 
 self.skipWaiting()
+// Take control of all open pages immediately on activation — without this,
+// a new SW only handles fetches from pages opened AFTER it activates, so the
+// currently-open tab keeps showing the old precached HTML/JS.
+clientsClaim()
 cleanupOutdatedCaches()
 
 // Injected at build time by vite-plugin-pwa.
