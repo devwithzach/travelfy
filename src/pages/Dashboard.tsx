@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Plane, Building2, Map, ListChecks, DollarSign,
   AlertCircle, Clock, CalendarDays, ChevronRight,
-  TrendingUp, CheckSquare, FileText, Globe, Circle, Check, MapPin, Plus, Pencil
+  TrendingUp, CheckSquare, FileText, Globe, Circle, Check, MapPin, Plus, Pencil, RefreshCw
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -62,7 +62,7 @@ function timeGreeting(d: Date): string {
 }
 
 export default function Dashboard() {
-  const { trip, updateTrip, activeTripId, trips, selectTrip } = useTrip()
+  const { trip, updateTrip, activeTripId, trips, selectTrip, refreshTrip } = useTrip()
   const { user } = useAuth()
   const place = useCurrentPlace()
   const navigate = useNavigate()
@@ -604,7 +604,7 @@ export default function Dashboard() {
 
       {/* Today's Itinerary Preview */}
       <motion.div variants={itemVariants}>
-        <TodayPreview now={now} updateTrip={updateTrip} />
+        <TodayPreview now={now} updateTrip={updateTrip} onRefresh={refreshTrip} />
       </motion.div>
 
       {/* Tour Notes */}
@@ -660,9 +660,14 @@ export default function Dashboard() {
   )
 }
 
-function TodayPreview({ now, updateTrip }: { now: Date; updateTrip: (u: (prev: TripData) => TripData) => void }) {
+function TodayPreview({ now, updateTrip, onRefresh }: { now: Date; updateTrip: (u: (prev: TripData) => TripData) => void; onRefresh: () => Promise<void> }) {
   const { trip } = useTrip()
   const navigate = useNavigate()
+  const [refreshing, setRefreshing] = useState(false)
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try { await onRefresh() } finally { setRefreshing(false) }
+  }
 
   const toggleDone = (dayId: string, actId: string) => {
     updateTrip(prev => ({
@@ -714,9 +719,22 @@ function TodayPreview({ now, updateTrip }: { now: Date; updateTrip: (u: (prev: T
               {doneCount}/{sortedActivities.length}
             </span>
           </span>
-          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => navigate('/timeline')}>
-            Full timeline
-          </Button>
+          <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="h-7 w-7"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-label="Refresh from server"
+              title="Pull latest from server"
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', refreshing && 'animate-spin')} />
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => navigate('/timeline')}>
+              Full timeline
+            </Button>
+          </div>
         </div>
         <div className="space-y-2">
           {visible.map(act => {

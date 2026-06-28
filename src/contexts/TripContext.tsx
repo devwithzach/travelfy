@@ -23,6 +23,8 @@ interface TripContextValue {
   exportTrip: () => string
   importTrip: (json: string) => Promise<boolean>
   seedSampleTrip: () => Promise<string>
+  /** Re-fetch the active trip from Supabase (and the trips list). No-op if not authenticated. */
+  refreshTrip: () => Promise<void>
 }
 
 const TripContext = createContext<TripContextValue | null>(null)
@@ -79,6 +81,32 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     setActiveTripId(null)
     setTrip(createEmptyTrip())
   }, [])
+
+  // Force a fresh read of the trip + list. Used by the visibility-change
+  // listener so returning to the app (e.g., after editing on Timeline in a
+  // different tab, or after the device went to sleep) shows current data.
+  const refreshTrip = useCallback(async () => {
+    if (!user) return
+    try {
+      const list = await storageService.listTrips(user.id)
+      setTrips(list)
+      if (activeTripId) {
+        const data = await storageService.getTripById(user.id, activeTripId)
+        setTrip(data)
+      }
+    } catch (err) {
+      console.warn('Failed to refresh trip:', err)
+    }
+  }, [user, activeTripId])
+
+  // Auto-refresh when the page becomes visible again (tab focus, app foregrounded).
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === 'visible') refreshTrip()
+    }
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [refreshTrip])
 
   const createNewTrip = useCallback(async (info: { name: string; destination: string; startDate: string; endDate: string; description: string }) => {
     if (!user) throw new Error('Not authenticated')
@@ -181,6 +209,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       trip, trips, activeTripId, loading, tripLoading, error, clearError,
       selectTrip, exitTrip, createNewTrip, deleteTripById,
       updateTrip, resetTrip, exportTrip, importTrip, seedSampleTrip,
+      refreshTrip,
     }}>
       {children}
     </TripContext.Provider>
