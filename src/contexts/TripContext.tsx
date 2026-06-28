@@ -25,6 +25,8 @@ interface TripContextValue {
   seedSampleTrip: () => Promise<string>
   /** Re-fetch the active trip from Supabase (and the trips list). No-op if not authenticated. */
   refreshTrip: () => Promise<void>
+  /** Clone an existing trip's structure (no expenses, no photos, no per-day dates). */
+  duplicateTrip: (sourceId: string, overrides?: { name?: string }) => Promise<string>
 }
 
 const TripContext = createContext<TripContextValue | null>(null)
@@ -194,6 +196,61 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     return newId
   }, [user])
 
+  // Clone an existing trip's reusable structure into a fresh trip:
+  //   keeps: itinerary skeleton (days + activities, dates cleared, done false),
+  //          checklist (unchecked), quick links, emergency contacts, hotels skeleton
+  //   drops: expenses, photos (their own table), specific dates, flight specifics,
+  //          documents, notes, visas, currency rates
+  // Useful for "plan my next trip using last trip as a template".
+  const duplicateTrip = useCallback(async (sourceId: string, overrides?: { name?: string }): Promise<string> => {
+    if (!user) throw new Error('Not authenticated')
+    const source = await storageService.getTripById(user.id, sourceId)
+    const newId = crypto.randomUUID()
+    const cloned: TripData = {
+      tripInfo: {
+        id: newId,
+        name: overrides?.name?.trim() || `Copy of ${source.tripInfo.name || 'Trip'}`,
+        destination: source.tripInfo.destination,
+        startDate: '',
+        endDate: '',
+        coverImage: '',
+        description: source.tripInfo.description,
+        status: 'upcoming',
+      },
+      settings: { ...source.settings },
+      tourNotes: [...source.tourNotes],
+      restrictions: [...source.restrictions],
+      flights: [], // flight numbers/dates rarely repeat
+      hotels: source.hotels.map(h => ({
+        ...h,
+        id: crypto.randomUUID(),
+        checkIn: '',
+        checkOut: '',
+        bookingReference: '',
+      })),
+      itinerary: source.itinerary.map(d => ({
+        ...d,
+        id: crypto.randomUUID(),
+        date: '',
+        activities: d.activities.map(a => ({ ...a, id: crypto.randomUUID(), done: false })),
+      })),
+      checklist: source.checklist.map(c => ({ ...c, id: crypto.randomUUID(), checked: false })),
+      expenses: [],
+      documents: [],
+      emergencyContacts: source.emergencyContacts.map(c => ({ ...c, id: crypto.randomUUID() })),
+      quickLinks: source.quickLinks.map(l => ({ ...l, id: crypto.randomUUID() })),
+      notes: [],
+      passport: source.passport,
+      visas: [],
+      currencyRates: [...source.currencyRates],
+      lastUpdated: new Date().toISOString(),
+    }
+    await storageService.saveTrip(user.id, cloned)
+    const list = await storageService.listTrips(user.id)
+    setTrips(list)
+    return newId
+  }, [user])
+
   const importTrip = useCallback(async (json: string) => {
     if (!user) return false
     const ok = await storageService.importTrip(user.id, json)
@@ -209,7 +266,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       trip, trips, activeTripId, loading, tripLoading, error, clearError,
       selectTrip, exitTrip, createNewTrip, deleteTripById,
       updateTrip, resetTrip, exportTrip, importTrip, seedSampleTrip,
-      refreshTrip,
+      refreshTrip, duplicateTrip,
     }}>
       {children}
     </TripContext.Provider>

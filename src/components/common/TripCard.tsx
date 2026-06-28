@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { CalendarDays, MapPin, Plane, Building2, Map as MapIcon, Camera, Trash2, ChevronRight } from 'lucide-react'
+import { CalendarDays, MapPin, Plane, Building2, Map as MapIcon, Camera, Trash2, ChevronRight, Copy } from 'lucide-react'
 import type { TripSummary } from '@/types'
 import { formatDate, getDaysUntil, getTripStatus, getTripProgress } from '@/utils/dateUtils'
 import { cn } from '@/utils/cn'
@@ -20,11 +20,12 @@ interface Props {
   trip: TripSummary
   onSelect: () => void
   onDelete?: () => void
+  onDuplicate?: () => void
   /** Compact mode used on Dashboard lobby — smaller padding, no gradient hero. */
   compact?: boolean
 }
 
-export default function TripCard({ trip, onSelect, onDelete, compact = false }: Props) {
+export default function TripCard({ trip, onSelect, onDelete, onDuplicate, compact = false }: Props) {
   // Status comes from getTripStatus (date-derived) rather than the stored field
   // so a row that hasn't been opened in days still shows the right phase.
   const liveStatus: TripSummary['status'] = trip.startDate && trip.endDate
@@ -139,15 +140,27 @@ export default function TripCard({ trip, onSelect, onDelete, compact = false }: 
         </div>
       </button>
 
-      {onDelete && (
-        <button
-          onClick={e => { e.stopPropagation(); onDelete() }}
-          aria-label="Delete trip"
-          className="absolute top-3 right-3 p-2 rounded-xl bg-black/20 hover:bg-black/40 text-white backdrop-blur-sm transition-colors"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      )}
+      <div className="absolute top-3 right-3 flex items-center gap-1.5">
+        {onDuplicate && (
+          <button
+            onClick={e => { e.stopPropagation(); onDuplicate() }}
+            aria-label="Duplicate trip as template"
+            title="Use as template for a new trip"
+            className="p-2 rounded-xl bg-black/20 hover:bg-black/40 text-white backdrop-blur-sm transition-colors"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {onDelete && (
+          <button
+            onClick={e => { e.stopPropagation(); onDelete() }}
+            aria-label="Delete trip"
+            className="p-2 rounded-xl bg-black/20 hover:bg-black/40 text-white backdrop-blur-sm transition-colors"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
     </motion.div>
   )
 }

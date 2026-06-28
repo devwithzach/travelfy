@@ -33,7 +33,7 @@ const emptyForm = { name: '', destination: '', startDate: '', endDate: '', descr
 export default function Trips() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { trips, loading, selectTrip, createNewTrip, deleteTripById, seedSampleTrip } = useTrip()
+  const { trips, loading, selectTrip, createNewTrip, deleteTripById, seedSampleTrip, duplicateTrip } = useTrip()
 
   const [createOpen, setCreateOpen] = useState(false)
   const [form, setForm] = useState(emptyForm)
@@ -41,6 +41,7 @@ export default function Trips() {
   const [deleteTarget, setDeleteTarget] = useState<TripSummary | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [seeding, setSeeding] = useState(false)
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null)
 
   const handleSeed = async () => {
     setSeeding(true)
@@ -52,6 +53,19 @@ export default function Trips() {
       console.error('Seed failed:', err)
     } finally {
       setSeeding(false)
+    }
+  }
+
+  const handleDuplicate = async (trip: TripSummary) => {
+    setDuplicatingId(trip.id)
+    try {
+      const newId = await duplicateTrip(trip.id)
+      selectTrip(newId)
+      navigate('/')
+    } catch (err) {
+      console.error('Duplicate failed:', err)
+    } finally {
+      setDuplicatingId(null)
     }
   }
 
@@ -170,6 +184,7 @@ export default function Trips() {
                     trip={trip}
                     onSelect={() => handleSelect(trip)}
                     onDelete={() => setDeleteTarget(trip)}
+                    onDuplicate={duplicatingId === trip.id ? undefined : () => handleDuplicate(trip)}
                   />
                 </motion.div>
               ))}

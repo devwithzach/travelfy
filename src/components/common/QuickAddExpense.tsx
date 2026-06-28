@@ -4,7 +4,7 @@ import { X, Loader2, Camera, Trash2 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import { useAuth } from '@/contexts/AuthContext'
 import type { Expense } from '@/types'
-import { guessLocalCurrency } from '@/utils/currency'
+import { guessLocalCurrency, convert } from '@/utils/currency'
 import { uploadReceipt } from '@/utils/receiptUpload'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -115,7 +115,7 @@ export default function QuickAddExpense({ open, onClose }: Props) {
             </div>
 
             {/* Amount + Currency, big primary input */}
-            <div className="flex gap-2 mb-3">
+            <div className="flex gap-2 mb-1">
               <div className="flex-1">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wide">Amount</Label>
                 <Input
@@ -138,6 +138,21 @@ export default function QuickAddExpense({ open, onClose }: Props) {
                 </Select>
               </div>
             </div>
+            {/* Live conversion hint while typing. Only shown when currency
+                differs from home and we have a rate path. */}
+            {(() => {
+              const v = parseFloat(amount)
+              if (!v || currency === trip.settings.homeCurrency) return <div className="h-5 mb-2" />
+              const converted = convert(trip.currencyRates, v, currency, trip.settings.homeCurrency)
+              return (
+                <p className="h-5 mb-2 text-xs text-muted-foreground text-right tabular-nums">
+                  {converted !== null
+                    ? <>≈ <span className="font-semibold text-foreground">{trip.settings.homeCurrency} {converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></>
+                    : <span className="text-amber-600">no rate to {trip.settings.homeCurrency}</span>
+                  }
+                </p>
+              )
+            })()}
 
             {/* Category pills */}
             <Label className="text-xs text-muted-foreground uppercase tracking-wide">Category</Label>
