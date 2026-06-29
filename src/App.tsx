@@ -22,6 +22,7 @@ import Settings from '@/pages/Settings'
 import MapExplorer from '@/pages/MapExplorer'
 import Photos from '@/pages/Photos'
 import Stats from '@/pages/Stats'
+import Landing from '@/pages/Landing'
 import InstallPrompt from '@/components/common/InstallPrompt'
 import PWAUpdatePrompt from '@/components/common/PWAUpdatePrompt'
 import { motion } from 'framer-motion'
@@ -86,7 +87,12 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <BrowserRouter>
-            <AppRoutes />
+            <Routes>
+              {/* Public landing page — no auth required */}
+              <Route path="/landing" element={<Landing />} />
+              {/* All other routes (auth-gated via AppRoutes) */}
+              <Route path="*" element={<AppRoutes />} />
+            </Routes>
             <InstallPrompt />
             <PWAUpdatePrompt />
           </BrowserRouter>

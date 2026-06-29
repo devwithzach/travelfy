@@ -1,14 +1,28 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import L from 'leaflet'
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
+import markerIcon from 'leaflet/dist/images/marker-icon.png'
+import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+import 'leaflet/dist/leaflet.css'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTrip } from '@/contexts/TripContext'
 import {
   Camera, Plus, X, Trash2, MapPin, Tag, ChevronLeft,
-  ChevronRight, Loader2, Image, Download, Layers, Star, StarOff
+  ChevronRight, Loader2, Image, Download, Layers, Star, StarOff,
+  FileText
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { compressImage } from '@/utils/image'
+
+// Fix Leaflet default icon issue with Vite
+delete (L.Icon.Default.prototype as any)._getIconUrl
+L.Icon.Default.mergeOptions({
+  iconUrl: markerIcon,
+  iconRetinaUrl: markerIcon2x,
+  shadowUrl: markerShadow,
+})
 
 const MAX_RAW_BYTES = 25 * 1024 * 1024 // 25MB before compression
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/heic', 'image/webp', 'image/gif']
@@ -28,6 +42,39 @@ interface TripPhoto {
   created_at: string
 }
 
+interface NominatimResult {
+  place_id: number
+  display_name: string
+  lat: string
+  lon: string
+  address?: {
+    country?: string
+    city?: string
+    town?: string
+  }
+}
+
+type UploadMode = 'camera' | 'gallery' | 'note'
+
+// Fake stepped progress: 10 → 40 → 80 → 100
+function useUploadProgress(uploading: boolean) {
+  const [progress, setProgress] = useState(0)
+
+  useEffect(() => {
+    if (!uploading) {
+      setProgress(0)
+      return
+    }
+    setProgress(10)
+    const t1 = setTimeout(() => setProgress(40), 600)
+    const t2 = setTimeout(() => setProgress(80), 1400)
+    return () => { clearTimeout(t1); clearTimeout(t2) }
+  }, [uploading])
+
+  // When upload finishes (uploading flips to false after success), caller sets 100
+  return { progress, setProgress }
+}
+
 // ── Main Component ───────────────────────────────────────────
 
 export default function Photos() {
@@ -42,14 +89,20 @@ export default function Photos() {
     updateTrip(prev => ({ ...prev, tripInfo: { ...prev.tripInfo, coverImage: '' } }))
   }
   const navigate = useNavigate()
-  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Separate hidden file inputs for camera vs gallery
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const galleryInputRef = useRef<HTMLInputElement>(null)
 
   const [photos, setPhotos] = useState<TripPhoto[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [showUploadSheet, setShowUploadSheet] = useState(false)
+  const [showActionSheet, setShowActionSheet] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [uploadMode, setUploadMode] = useState<UploadMode>('camera')
+  const [successToast, setSuccessToast] = useState(false)
 
   // Upload form state
   const [pendingFile, setPendingFile] = useState<File | null>(null)
@@ -62,11 +115,62 @@ export default function Photos() {
   const [photoLon, setPhotoLon] = useState<number | null>(null)
   const [gpsLoading, setGpsLoading] = useState(false)
 
+  // Nominatim auto-suggest
+  const [locationSuggestions, setLocationSuggestions] = useState<NominatimResult[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const nominatimTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Mini Leaflet map
+  const miniMapRef = useRef<HTMLDivElement>(null)
+  const miniMapInstance = useRef<L.Map | null>(null)
+  const miniMarkerRef = useRef<L.Marker | null>(null)
+
   // Itinerary tag state
   const [selectedDayId, setSelectedDayId] = useState('')
   const [selectedActivityId, setSelectedActivityId] = useState('')
 
-  // Load photos
+  // Progress bar
+  const { progress, setProgress } = useUploadProgress(uploading)
+
+  // ── Mini Leaflet map init / update ───────────────────────────
+  useEffect(() => {
+    if (!photoLat || !photoLon || !miniMapRef.current) return
+
+    if (!miniMapInstance.current) {
+      const map = L.map(miniMapRef.current, {
+        zoomControl: false,
+        dragging: false,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
+        touchZoom: false,
+        keyboard: false,
+      }).setView([photoLat, photoLon], 15)
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap',
+        maxZoom: 19,
+      }).addTo(map)
+
+      miniMarkerRef.current = L.marker([photoLat, photoLon]).addTo(map)
+      miniMapInstance.current = map
+    } else {
+      miniMapInstance.current.setView([photoLat, photoLon], 15)
+      if (miniMarkerRef.current) {
+        miniMarkerRef.current.setLatLng([photoLat, photoLon])
+      }
+    }
+  }, [photoLat, photoLon])
+
+  // Destroy mini map when sheet closes
+  useEffect(() => {
+    if (!showUploadSheet && miniMapInstance.current) {
+      miniMapInstance.current.remove()
+      miniMapInstance.current = null
+      miniMarkerRef.current = null
+    }
+  }, [showUploadSheet])
+
+  // ── Load photos ──────────────────────────────────────────────
   const loadPhotos = useCallback(async () => {
     if (!user) return
     setLoading(true)
@@ -82,7 +186,35 @@ export default function Photos() {
 
   useEffect(() => { loadPhotos() }, [loadPhotos])
 
-  // File selected
+  // ── GPS + reverse geocode ────────────────────────────────────
+  const startGps = () => {
+    setGpsLoading(true)
+    setPhotoLat(null)
+    setPhotoLon(null)
+    if (!navigator.geolocation) { setGpsLoading(false); return }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude
+        const lon = pos.coords.longitude
+        setPhotoLat(lat)
+        setPhotoLon(lon)
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=16`,
+            { headers: { 'Accept-Language': 'en' } }
+          )
+          const data = await res.json()
+          const place = data.address?.tourism || data.address?.amenity || data.address?.road || data.address?.suburb || data.address?.city || ''
+          if (place) setLocationTag(place)
+        } catch { /* ignore */ }
+        setGpsLoading(false)
+      },
+      () => setGpsLoading(false),
+      { enableHighAccuracy: true, timeout: 8000 }
+    )
+  }
+
+  // ── File selected ────────────────────────────────────────────
   const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -93,8 +225,6 @@ export default function Photos() {
       setUploadError(`Photo too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 25MB.`)
       return
     }
-    // Some iOS HEIC/HEIF files report empty type — accept those too and let the
-    // browser/Supabase reject if it really can't handle them.
     if (file.type && !ALLOWED_IMAGE_TYPES.includes(file.type)) {
       setUploadError('Only JPEG, PNG, HEIC, WebP, or GIF allowed.')
       return
@@ -103,39 +233,72 @@ export default function Photos() {
     setPendingFile(file)
     setPendingPreview(URL.createObjectURL(file))
     setShowUploadSheet(true)
-
-    // Auto-GPS
-    setGpsLoading(true)
-    setPhotoLat(null)
-    setPhotoLon(null)
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const lat = pos.coords.latitude
-          const lon = pos.coords.longitude
-          setPhotoLat(lat)
-          setPhotoLon(lon)
-          // Reverse geocode with Nominatim
-          try {
-            const res = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=16`,
-              { headers: { 'Accept-Language': 'en' } }
-            )
-            const data = await res.json()
-            const place = data.address?.tourism || data.address?.amenity || data.address?.road || data.address?.suburb || data.address?.city || ''
-            if (place) setLocationTag(place)
-          } catch { /* ignore */ }
-          setGpsLoading(false)
-        },
-        () => setGpsLoading(false),
-        { enableHighAccuracy: true, timeout: 8000 }
-      )
-    } else {
-      setGpsLoading(false)
-    }
+    startGps()
   }
 
+  // ── Nominatim auto-suggest ───────────────────────────────────
+  const onLocationInput = (val: string) => {
+    setLocationTag(val)
+    setShowSuggestions(false)
+    if (nominatimTimer.current) clearTimeout(nominatimTimer.current)
+    if (val.trim().length < 2) { setLocationSuggestions([]); return }
+    nominatimTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val)}&limit=5&accept-language=en`
+        )
+        const data: NominatimResult[] = await res.json()
+        setLocationSuggestions(data)
+        setShowSuggestions(data.length > 0)
+      } catch { /* ignore */ }
+    }, 400)
+  }
+
+  const pickSuggestion = (s: NominatimResult) => {
+    setLocationTag(s.display_name.split(',')[0])
+    setShowSuggestions(false)
+    setLocationSuggestions([])
+    const lat = parseFloat(s.lat)
+    const lon = parseFloat(s.lon)
+    setPhotoLat(lat)
+    setPhotoLon(lon)
+  }
+
+  // ── Open action sheet ────────────────────────────────────────
+  const openActionSheet = () => setShowActionSheet(true)
+
+  const triggerCamera = () => {
+    setShowActionSheet(false)
+    setUploadMode('camera')
+    setTimeout(() => cameraInputRef.current?.click(), 100)
+  }
+
+  const triggerGallery = () => {
+    setShowActionSheet(false)
+    setUploadMode('gallery')
+    setTimeout(() => galleryInputRef.current?.click(), 100)
+  }
+
+  const triggerNote = () => {
+    setShowActionSheet(false)
+    setUploadMode('note')
+    setPendingFile(null)
+    setPendingPreview(null)
+    setCaption('')
+    setLocationTag('')
+    setPhotoLat(null)
+    setPhotoLon(null)
+    setGpsLoading(false)
+    setSelectedDayId('')
+    setSelectedActivityId('')
+    setUploadError(null)
+    setShowUploadSheet(true)
+    startGps()
+  }
+
+  // ── Cancel upload sheet ──────────────────────────────────────
   const cancelUpload = () => {
+    if (uploading) return // block close while uploading
     setShowUploadSheet(false)
     setPendingFile(null)
     setPendingPreview(null)
@@ -146,29 +309,43 @@ export default function Photos() {
     setGpsLoading(false)
     setSelectedDayId('')
     setSelectedActivityId('')
+    setLocationSuggestions([])
+    setShowSuggestions(false)
+    setUploadError(null)
   }
 
-  // Upload to Supabase Storage + insert metadata
+  // ── Upload to Supabase Storage + insert metadata ─────────────
   const uploadPhoto = async () => {
-    if (!pendingFile || !user) return
+    if (!user) return
+    // For notes, no file is required
+    if (uploadMode !== 'note' && !pendingFile) return
+
     setUploading(true)
     setUploadError(null)
 
     try {
-      // Compress before upload — cuts iPhone photos from ~5MB to ~500KB,
-      // huge win on cellular abroad.
-      const fileToUpload = await compressImage(pendingFile, { maxDimension: 2048, quality: 0.85 })
-      const ext = fileToUpload.name.split('.').pop() || 'jpg'
+      let publicUrl = ''
+      let storagePath = ''
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
-      const path = `${user.id}/${id}.${ext}`
 
-      const { error: uploadErr } = await supabase.storage
-        .from('trip-photos')
-        .upload(path, fileToUpload, { contentType: fileToUpload.type, upsert: false })
+      if (pendingFile && uploadMode !== 'note') {
+        const fileToUpload = await compressImage(pendingFile, { maxDimension: 2048, quality: 0.85 })
+        const ext = fileToUpload.name.split('.').pop() || 'jpg'
+        const path = `${user.id}/${id}.${ext}`
 
-      if (uploadErr) throw uploadErr
+        const { error: uploadErr } = await supabase.storage
+          .from('trip-photos')
+          .upload(path, fileToUpload, { contentType: fileToUpload.type, upsert: false })
 
-      const { data: urlData } = supabase.storage.from('trip-photos').getPublicUrl(path)
+        if (uploadErr) throw uploadErr
+
+        const { data: urlData } = supabase.storage.from('trip-photos').getPublicUrl(path)
+        publicUrl = urlData.publicUrl
+        storagePath = path
+      }
+
+      // Advance progress to 80 before DB insert
+      setProgress(80)
 
       const selectedDay = trip.itinerary.find(d => d.id === selectedDayId)
       const selectedActivity = selectedDay?.activities.find(a => a.id === selectedActivityId)
@@ -180,8 +357,8 @@ export default function Photos() {
         id,
         trip_id: trip.tripInfo.id,
         user_id: user.id,
-        storage_path: path,
-        public_url: urlData.publicUrl,
+        storage_path: storagePath,
+        public_url: publicUrl,
         caption,
         location_tag: locationTag,
         activity_tag: activityLabel,
@@ -192,20 +369,29 @@ export default function Photos() {
 
       if (dbErr) throw dbErr
 
+      setProgress(100)
       await loadPhotos()
-      cancelUpload()
+
+      // Show success toast then close
+      setSuccessToast(true)
+      setTimeout(() => {
+        setSuccessToast(false)
+        setUploading(false)
+        cancelUpload()
+      }, 2000)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       setUploadError(`Upload failed: ${msg}`)
-    } finally {
       setUploading(false)
     }
   }
 
-  // Delete photo
+  // ── Delete photo ─────────────────────────────────────────────
   const deletePhoto = async (photo: TripPhoto) => {
     if (!confirm('Delete this photo?')) return
-    await supabase.storage.from('trip-photos').remove([photo.storage_path])
+    if (photo.storage_path) {
+      await supabase.storage.from('trip-photos').remove([photo.storage_path])
+    }
     await supabase.from('trip_photos').delete().eq('id', photo.id)
     setPhotos(prev => prev.filter(p => p.id !== photo.id))
     if (lightboxIndex !== null) setLightboxIndex(null)
@@ -217,7 +403,6 @@ export default function Photos() {
     <div className="min-h-screen bg-background pb-28">
       {/* Header */}
       <div className="px-4 pb-4 pt-[max(1.5rem,env(safe-area-inset-top))]">
-        {/* Trip breadcrumb (dynamic — reads active trip from TripContext) */}
         {trip.tripInfo.name && (
           <button
             onClick={() => navigate('/trips')}
@@ -234,7 +419,7 @@ export default function Photos() {
             <p className="text-sm text-muted-foreground mt-0.5">{photos.length} photo{photos.length !== 1 ? 's' : ''} captured</p>
           </div>
           <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={openActionSheet}
             className="w-11 h-11 rounded-2xl gradient-brand flex items-center justify-center shadow-lg"
             aria-label="Add photo"
           >
@@ -243,12 +428,19 @@ export default function Photos() {
         </div>
       </div>
 
-      {/* Hidden file input — accepts images + camera on mobile */}
+      {/* Hidden file inputs */}
       <input
-        ref={fileInputRef}
+        ref={cameraInputRef}
         type="file"
         accept="image/*"
         capture="environment"
+        className="hidden"
+        onChange={onFileSelected}
+      />
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*"
         className="hidden"
         onChange={onFileSelected}
       />
@@ -285,12 +477,27 @@ export default function Photos() {
             <p className="font-semibold text-lg">No photos yet</p>
             <p className="text-sm text-muted-foreground mt-1">Capture your trip memories — activities, places you discover, food, moments.</p>
           </div>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="mt-2 px-6 py-3 rounded-2xl gradient-brand text-white font-semibold text-sm shadow-lg flex items-center gap-2"
-          >
-            <Camera className="h-4 w-4" /> Take a Photo
-          </button>
+          {/* Two upload mode buttons on empty state */}
+          <div className="mt-2 flex flex-col gap-2 w-full max-w-xs">
+            <button
+              onClick={triggerCamera}
+              className="w-full px-6 py-3 rounded-2xl gradient-brand text-white font-semibold text-sm shadow-lg flex items-center justify-center gap-2"
+            >
+              <Camera className="h-4 w-4" /> 📷 Take Photo
+            </button>
+            <button
+              onClick={triggerGallery}
+              className="w-full px-6 py-3 rounded-2xl bg-muted border border-border text-foreground font-semibold text-sm shadow flex items-center justify-center gap-2"
+            >
+              🖼 Choose from Gallery
+            </button>
+            <button
+              onClick={triggerNote}
+              className="w-full px-6 py-3 rounded-2xl bg-muted border border-border text-foreground font-semibold text-sm shadow flex items-center justify-center gap-2"
+            >
+              ✏️ Add Note / Memory
+            </button>
+          </div>
         </motion.div>
       )}
 
@@ -307,15 +514,24 @@ export default function Photos() {
                 onClick={() => setLightboxIndex(i)}
                 className="relative aspect-square rounded-xl overflow-hidden bg-muted group"
               >
-                <img
-                  src={photo.public_url}
-                  alt={photo.caption || 'Trip photo'}
-                  className="w-full h-full object-cover"
-                  loading="lazy"
-                />
+                {photo.public_url ? (
+                  <img
+                    src={photo.public_url}
+                    alt={photo.caption || 'Trip photo'}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-muted">
+                    <FileText className="h-7 w-7 text-muted-foreground/60" />
+                    {photo.caption && (
+                      <p className="text-[9px] text-muted-foreground text-center px-1 line-clamp-2">{photo.caption}</p>
+                    )}
+                  </div>
+                )}
                 {/* Overlay on hover/tap */}
                 <div className="absolute inset-0 bg-black/0 group-active:bg-black/20 transition-colors" />
-                {photo.caption && (
+                {photo.caption && photo.public_url && (
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-1.5">
                     <p className="text-white text-[10px] leading-tight truncate">{photo.caption}</p>
                   </div>
@@ -345,16 +561,73 @@ export default function Photos() {
       {/* FAB */}
       {!loading && photos.length > 0 && (
         <button
-          onClick={() => fileInputRef.current?.click()}
+          onClick={openActionSheet}
           className="fixed bottom-24 right-4 z-40 w-14 h-14 rounded-2xl gradient-brand flex items-center justify-center shadow-xl"
+          aria-label="Add photo"
         >
           <Camera className="h-6 w-6 text-white" />
         </button>
       )}
 
+      {/* Action Sheet — Camera / Gallery / Note */}
+      <AnimatePresence>
+        {showActionSheet && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/60"
+              onClick={() => setShowActionSheet(false)}
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28 }}
+              className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-3xl shadow-2xl pb-safe"
+            >
+              <div className="flex items-center justify-between px-5 pt-5 pb-3">
+                <h2 className="text-lg font-bold">Add to Photos</h2>
+                <button
+                  onClick={() => setShowActionSheet(false)}
+                  className="w-8 h-8 rounded-full bg-muted flex items-center justify-center"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="px-5 pb-8 flex flex-col gap-3">
+                <button
+                  onClick={triggerCamera}
+                  className="w-full py-4 rounded-2xl gradient-brand text-white font-semibold text-base flex items-center justify-center gap-3 shadow-lg"
+                >
+                  <Camera className="h-5 w-5" />
+                  📷 Take Photo
+                </button>
+                <button
+                  onClick={triggerGallery}
+                  className="w-full py-4 rounded-2xl bg-muted border border-border text-foreground font-semibold text-base flex items-center justify-center gap-3"
+                >
+                  <Image className="h-5 w-5" />
+                  🖼 Choose from Gallery
+                </button>
+                <button
+                  onClick={triggerNote}
+                  className="w-full py-4 rounded-2xl bg-muted border border-border text-foreground font-semibold text-base flex items-center justify-center gap-3"
+                >
+                  <FileText className="h-5 w-5" />
+                  ✏️ Add Note / Memory
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Upload Sheet */}
       <AnimatePresence>
-        {showUploadSheet && pendingPreview && (
+        {showUploadSheet && (
           <>
             <motion.div
               initial={{ opacity: 0 }}
@@ -370,32 +643,77 @@ export default function Photos() {
               transition={{ type: 'spring', damping: 28 }}
               className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-3xl shadow-2xl max-h-[92vh] overflow-y-auto"
             >
+              {/* Success toast */}
+              <AnimatePresence>
+                {successToast && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    className="mx-5 mt-4 px-4 py-3 rounded-xl bg-green-500/15 border border-green-500/30 text-green-700 dark:text-green-400 text-sm font-semibold flex items-center gap-2"
+                    role="status"
+                  >
+                    <span className="text-base">✓</span> Photo saved!
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <div className="flex items-center justify-between px-5 pt-5 pb-3">
-                <h2 className="text-lg font-bold">Add Photo</h2>
-                <button onClick={cancelUpload} className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                <h2 className="text-lg font-bold">
+                  {uploadMode === 'note' ? 'Add Note / Memory' : 'Add Photo'}
+                </h2>
+                <button
+                  onClick={cancelUpload}
+                  disabled={uploading}
+                  className="w-8 h-8 rounded-full bg-muted flex items-center justify-center disabled:opacity-40"
+                  aria-label="Close"
+                >
                   <X className="h-4 w-4" />
                 </button>
               </div>
 
-              {/* Preview */}
-              <div className="mx-5 rounded-2xl overflow-hidden aspect-video bg-muted">
-                <img src={pendingPreview} alt="Preview" className="w-full h-full object-cover" />
-              </div>
+              {/* Progress bar */}
+              {uploading && (
+                <div className="mx-5 mb-2">
+                  <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full rounded-full gradient-brand"
+                      initial={{ width: '0%' }}
+                      animate={{ width: `${progress}%` }}
+                      transition={{ duration: 0.5, ease: 'easeInOut' }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Preview or Note placeholder */}
+              {pendingPreview ? (
+                <div className="mx-5 rounded-2xl overflow-hidden aspect-video bg-muted">
+                  <img src={pendingPreview} alt="Preview" className="w-full h-full object-cover" />
+                </div>
+              ) : uploadMode === 'note' ? (
+                <div className="mx-5 rounded-2xl aspect-video bg-muted flex flex-col items-center justify-center gap-2 border-2 border-dashed border-border">
+                  <FileText className="h-10 w-10 text-muted-foreground/50" />
+                  <p className="text-sm text-muted-foreground">Note / Memory entry</p>
+                </div>
+              ) : null}
 
               <div className="px-5 pt-4 pb-8 space-y-4">
                 {/* Caption */}
                 <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Caption</label>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    {uploadMode === 'note' ? 'Note / Memory' : 'Caption'}
+                  </label>
                   <input
                     value={caption}
                     onChange={e => setCaption(e.target.value)}
-                    placeholder="What's happening here?"
+                    placeholder={uploadMode === 'note' ? 'Write your memory or note...' : "What's happening here?"}
                     className="mt-1.5 w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                   />
                 </div>
 
-                {/* Location Tag */}
-                <div>
+                {/* Location Tag with auto-suggest */}
+                <div className="relative">
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
                     <MapPin className="h-3 w-3" /> Location
                     {gpsLoading && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
@@ -403,13 +721,51 @@ export default function Photos() {
                   </label>
                   <input
                     value={locationTag}
-                    onChange={e => setLocationTag(e.target.value)}
+                    onChange={e => onLocationInput(e.target.value)}
+                    onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                    onFocus={() => locationSuggestions.length > 0 && setShowSuggestions(true)}
                     placeholder={gpsLoading ? 'Detecting location...' : 'e.g. Disneyland, Venetian Macau...'}
                     disabled={gpsLoading}
                     className="mt-1.5 w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
                   />
+
+                  {/* Nominatim suggestions dropdown */}
+                  <AnimatePresence>
+                    {showSuggestions && locationSuggestions.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        className="absolute left-0 right-0 top-full mt-1 z-10 bg-background border border-border rounded-xl shadow-xl overflow-hidden"
+                      >
+                        {locationSuggestions.map((s) => (
+                          <button
+                            key={s.place_id}
+                            onMouseDown={() => pickSuggestion(s)}
+                            className="w-full px-4 py-2.5 text-left text-sm hover:bg-muted transition-colors flex flex-col gap-0.5"
+                          >
+                            <span className="font-medium truncate">{s.display_name.split(',')[0]}</span>
+                            <span className="text-xs text-muted-foreground truncate">
+                              {s.display_name.split(',').slice(1, 3).join(',')}
+                            </span>
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Mini Leaflet map */}
                   {photoLat && photoLon && (
-                    <p className="text-xs text-muted-foreground mt-1 font-mono">{photoLat.toFixed(5)}, {photoLon.toFixed(5)}</p>
+                    <div className="mt-2">
+                      <div
+                        ref={miniMapRef}
+                        className="w-full rounded-xl overflow-hidden border border-border"
+                        style={{ height: 100 }}
+                      />
+                      <p className="text-xs text-muted-foreground font-mono mt-1">
+                        {photoLat.toFixed(5)}, {photoLon.toFixed(5)}
+                      </p>
+                    </div>
                   )}
                 </div>
 
@@ -444,16 +800,33 @@ export default function Photos() {
                   </div>
                 </div>
 
-                {/* Upload Button */}
+                {/* Inline error */}
                 {uploadError && (
-                  <p className="text-xs text-destructive text-center" role="alert">{uploadError}</p>
+                  <div className="px-3 py-2 rounded-xl bg-destructive/10 text-destructive text-xs flex items-center gap-2" role="alert">
+                    <span className="flex-1">{uploadError}</span>
+                    <button onClick={() => setUploadError(null)} aria-label="Dismiss">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 )}
+
+                {/* Save Button */}
                 <button
                   onClick={uploadPhoto}
-                  disabled={uploading}
+                  disabled={uploading || successToast}
                   className="w-full py-4 rounded-2xl gradient-brand text-white font-bold text-sm shadow-lg flex items-center justify-center gap-2 disabled:opacity-60"
                 >
-                  {uploading ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading…</> : <><Image className="h-4 w-4" /> Save Photo</>}
+                  {uploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Uploading… {progress}%
+                    </>
+                  ) : (
+                    <>
+                      <Image className="h-4 w-4" />
+                      {uploadMode === 'note' ? 'Save Note' : 'Save Photo'}
+                    </>
+                  )}
                 </button>
               </div>
             </motion.div>
@@ -496,7 +869,7 @@ export default function Photos() {
               </button>
             </div>
 
-            {/* Image */}
+            {/* Image or Note */}
             <div className="flex-1 flex items-center justify-center px-2 relative">
               <button
                 onClick={() => setLightboxIndex(i => i !== null && i > 0 ? i - 1 : i)}
@@ -506,14 +879,28 @@ export default function Photos() {
                 <ChevronLeft className="h-5 w-5 text-white" />
               </button>
 
-              <motion.img
-                key={lightboxPhoto.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                src={lightboxPhoto.public_url}
-                alt={lightboxPhoto.caption}
-                className="max-w-full max-h-full object-contain rounded-xl"
-              />
+              {lightboxPhoto.public_url ? (
+                <motion.img
+                  key={lightboxPhoto.id}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  src={lightboxPhoto.public_url}
+                  alt={lightboxPhoto.caption}
+                  className="max-w-full max-h-full object-contain rounded-xl"
+                />
+              ) : (
+                <motion.div
+                  key={lightboxPhoto.id}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="max-w-sm w-full mx-4 bg-white/10 rounded-2xl p-8 flex flex-col items-center gap-4"
+                >
+                  <FileText className="h-12 w-12 text-white/60" />
+                  {lightboxPhoto.caption && (
+                    <p className="text-white text-center text-base">{lightboxPhoto.caption}</p>
+                  )}
+                </motion.div>
+              )}
 
               <button
                 onClick={() => setLightboxIndex(i => i !== null && i < photos.length - 1 ? i + 1 : i)}
@@ -526,7 +913,7 @@ export default function Photos() {
 
             {/* Bottom info */}
             <div className="px-5 pb-8 pt-3 bg-black/60">
-              {lightboxPhoto.caption && (
+              {lightboxPhoto.caption && lightboxPhoto.public_url && (
                 <p className="text-white font-medium text-sm">{lightboxPhoto.caption}</p>
               )}
               <div className="flex gap-3 mt-2 flex-wrap">
@@ -544,15 +931,17 @@ export default function Photos() {
                   {new Date(lightboxPhoto.created_at).toLocaleDateString()}
                 </span>
               </div>
-              <a
-                href={lightboxPhoto.public_url}
-                download
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 flex items-center gap-2 text-xs text-white/50 hover:text-white/80 transition-colors"
-              >
-                <Download className="h-3.5 w-3.5" /> Download original
-              </a>
+              {lightboxPhoto.public_url && (
+                <a
+                  href={lightboxPhoto.public_url}
+                  download
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 flex items-center gap-2 text-xs text-white/50 hover:text-white/80 transition-colors"
+                >
+                  <Download className="h-3.5 w-3.5" /> Download original
+                </a>
+              )}
             </div>
           </motion.div>
         )}

@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   UtensilsCrossed, ShoppingBag, Camera, Gift,
   Bus, Pill, Loader2, Navigation, X, Clock, Footprints,
-  Bookmark, BookmarkCheck, Star, LocateFixed
+  Bookmark, BookmarkCheck, Star, LocateFixed, MapPin
 } from 'lucide-react'
 import NavigationBanner from '@/components/map/NavigationBanner'
 import SavePlaceSheet from '@/components/map/SavePlaceSheet'
@@ -31,7 +31,7 @@ L.Icon.Default.mergeOptions({
 const CATEGORIES = [
   {
     id: 'food',
-    label: 'Food & Dining',
+    label: 'Food',
     icon: UtensilsCrossed,
     color: '#f97316',
     markerColor: '#f97316',
@@ -39,7 +39,7 @@ const CATEGORIES = [
   },
   {
     id: 'shopping',
-    label: 'Malls & Shops',
+    label: 'Malls',
     icon: ShoppingBag,
     color: '#8b5cf6',
     markerColor: '#8b5cf6',
@@ -71,7 +71,7 @@ const CATEGORIES = [
   },
   {
     id: 'pharmacy',
-    label: 'Pharmacy & Medical',
+    label: 'Pharmacy',
     icon: Pill,
     color: '#ef4444',
     markerColor: '#ef4444',
@@ -247,6 +247,12 @@ function formatInstruction(step: any): string {
   return `${type}${name}`
 }
 
+// ── Distance helpers ─────────────────────────────────────────
+
+function fmtDist(m: number): string {
+  return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${m} m`
+}
+
 // ── Main Component ───────────────────────────────────────────
 
 export default function MapExplorer() {
@@ -257,11 +263,17 @@ export default function MapExplorer() {
   const markersRef = useRef<L.Layer[]>([])
   const hotelMarkersRef = useRef<L.Layer[]>([])
   const watchIdRef = useRef<number | null>(null)
+  const posWatchRef = useRef<number | null>(null)
   const userMarkerRef = useRef<L.CircleMarker | null>(null)
   const savedMarkersRef = useRef<L.Layer[]>([])
 
   // Geocoded hotel coords (lazily populated when mapsUrl doesn't contain coords)
   const [geocodedHotels, setGeocodedHotels] = useState<Record<string, { lat: number; lon: number }>>({})
+
+  // GPS state
+  const [userPos, setUserPos] = useState<[number, number] | null>(null)
+  const [userLocName, setUserLocName] = useState<string>('My Location')
+  const [autoLocating, setAutoLocating] = useState(true)
 
   // Geocode any hotel whose mapsUrl doesn't yield coords.
   useEffect(() => {
@@ -269,8 +281,6 @@ export default function MapExplorer() {
     trip.hotels.forEach(h => {
       if (parseMapsUrl(h.mapsUrl)) return
       if (geocodedHotels[h.id]) return
-      // Build a few candidate queries from most specific to least, so a missing
-      // address or vague name still has a chance.
       const candidates = [
         [h.name, h.address].filter(Boolean).join(', '),
         [h.name, trip.tripInfo.destination].filter(Boolean).join(', '),
@@ -292,25 +302,31 @@ export default function MapExplorer() {
     return () => { cancelled = true }
   }, [trip.hotels, trip.tripInfo.destination])
 
-  // Build location list from trip data. Hotels appear if mapsUrl contains coords
-  // OR if address geocoding has resolved them.
-  const locations: Location[] = [
-    ...trip.hotels
-      .map(h => {
-        const coords = parseMapsUrl(h.mapsUrl) ?? geocodedHotels[h.id]
-        if (!coords) return null
-        return { name: h.name, lat: coords.lat, lon: coords.lon, country: '' }
-      })
-      .filter((l): l is Location => l !== null),
-    { name: 'Wong Tai Sin Shrine', lat: 22.3420, lon: 114.1934, country: 'Hong Kong' },
-    { name: 'West Kowloon Cultural District', lat: 22.3033, lon: 114.1603, country: 'Hong Kong' },
-    { name: 'HK Disneyland', lat: 22.3130, lon: 114.0448, country: 'Hong Kong' },
-    { name: 'Ruins of St. Paul\'s', lat: 22.1975, lon: 113.5388, country: 'Macau' },
-    { name: 'The Venetian Macau', lat: 22.1496, lon: 113.5668, country: 'Macau' },
-    { name: 'Golden Lotus Square', lat: 22.1969, lon: 113.5514, country: 'Macau' },
-  ]
+  // Build location list: My Location first, then trip hotels only
+  const myLocationEntry: Location = {
+    name: userLocName,
+    lat: userPos?.[0] ?? 0,
+    lon: userPos?.[1] ?? 0,
+    country: '',
+  }
 
-  const [selectedLocation, setSelectedLocation] = useState<Location>(locations[0] ?? { name: 'Hong Kong', lat: 22.3193, lon: 114.1694, country: 'Hong Kong' })
+  const hotelLocations: Location[] = trip.hotels
+    .map(h => {
+      const coords = parseMapsUrl(h.mapsUrl) ?? geocodedHotels[h.id]
+      if (!coords) return null
+      return { name: h.name, lat: coords.lat, lon: coords.lon, country: '' }
+    })
+    .filter((l): l is Location => l !== null)
+
+  const locations: Location[] = [myLocationEntry, ...hotelLocations]
+
+  // Default: first hotel if GPS not yet resolved, else My Location
+  const defaultLocation: Location =
+    hotelLocations.length > 0
+      ? hotelLocations[0]
+      : { name: 'Current Location', lat: 0, lon: 0, country: '' }
+
+  const [selectedLocation, setSelectedLocation] = useState<Location>(defaultLocation)
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [pois, setPois] = useState<POI[]>([])
   const [loading, setLoading] = useState(false)
@@ -327,7 +343,6 @@ export default function MapExplorer() {
   const [navMode, setNavMode] = useState(false)
   const [navSteps, setNavSteps] = useState<NavStep[]>([])
   const [currentStepIdx, setCurrentStepIdx] = useState(0)
-  const [userPos, setUserPos] = useState<[number, number] | null>(null)
   const [distToNext, setDistToNext] = useState<number | null>(null)
   const [showNextTurns, setShowNextTurns] = useState(false)
 
@@ -338,53 +353,72 @@ export default function MapExplorer() {
   const [saveNotes, setSaveNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // "Locate me" state (outside nav mode)
-  const [locating, setLocating] = useState(false)
-
-  const locateMe = useCallback(() => {
-    if (!navigator.geolocation || !mapRef.current) {
-      setError('Geolocation not supported by this browser.')
+  // ── Auto-locate on mount (one-time + persistent watch) ──────
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      setAutoLocating(false)
       return
     }
-    setLocating(true)
-    setError(null)
+
+    // One-time high-accuracy fix to pan map immediately
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const lat = pos.coords.latitude
         const lon = pos.coords.longitude
-        if (!mapRef.current) return
-        mapRef.current.flyTo([lat, lon], 16, { duration: 1 })
+        setUserPos([lat, lon])
+        setAutoLocating(false)
+        if (mapRef.current) {
+          mapRef.current.setView([lat, lon], 15)
+          if (!userMarkerRef.current) {
+            userMarkerRef.current = L.circleMarker([lat, lon], {
+              radius: 10, fillColor: '#2563EB', color: 'white', weight: 3, fillOpacity: 1,
+            }).addTo(mapRef.current)
+          } else {
+            userMarkerRef.current.setLatLng([lat, lon])
+          }
+        }
+        // Set as explore center
+        setSelectedLocation({ name: userLocName, lat, lon, country: '' })
+      },
+      () => setAutoLocating(false),
+      { enableHighAccuracy: true, timeout: 12000 },
+    )
+
+    // Persistent low-frequency watch for live distances
+    posWatchRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lat = pos.coords.latitude
+        const lon = pos.coords.longitude
+        setUserPos([lat, lon])
         if (userMarkerRef.current) {
           userMarkerRef.current.setLatLng([lat, lon])
-        } else {
+        } else if (mapRef.current) {
           userMarkerRef.current = L.circleMarker([lat, lon], {
             radius: 10, fillColor: '#2563EB', color: 'white', weight: 3, fillOpacity: 1,
           }).addTo(mapRef.current)
         }
-        setLocating(false)
       },
-      (err) => {
-        setLocating(false)
-        const msg =
-          err.code === err.PERMISSION_DENIED
-            ? 'Location permission denied. Enable it in your browser settings.'
-            : err.code === err.POSITION_UNAVAILABLE
-              ? 'Location unavailable. Check GPS or try outdoors.'
-              : err.code === err.TIMEOUT
-                ? 'Location request timed out.'
-                : 'Could not get your location.'
-        setError(msg)
-      },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 },
+      () => {},
+      { enableHighAccuracy: false, maximumAge: 15000, timeout: 20000 },
     )
-  }, [])
+
+    return () => {
+      if (posWatchRef.current !== null) navigator.geolocation.clearWatch(posWatchRef.current)
+    }
+  }, []) // once on mount only
+
+  // Distance from user (GPS-first, fallback to selectedLocation)
+  const distFromUser = useCallback((poi: POI): number => {
+    if (userPos) return haversine(userPos[0], userPos[1], poi.lat, poi.lon)
+    return poi.distance ?? haversine(selectedLocation.lat, selectedLocation.lon, poi.lat, poi.lon)
+  }, [userPos, selectedLocation])
 
   // Init map
   useEffect(() => {
     if (!mapElRef.current || mapRef.current) return
 
     const map = L.map(mapElRef.current, {
-      center: [selectedLocation.lat, selectedLocation.lon],
+      center: [selectedLocation.lat || 22.3193, selectedLocation.lon || 114.1694],
       zoom: 15,
       zoomControl: false,
     })
@@ -404,8 +438,7 @@ export default function MapExplorer() {
     }
   }, [])
 
-  // Add hotel markers. Must depend on geocodedHotels too so pins appear once
-  // address geocoding resolves.
+  // Add hotel markers
   useEffect(() => {
     if (!mapRef.current) return
     hotelMarkersRef.current.forEach(m => mapRef.current!.removeLayer(m))
@@ -427,13 +460,14 @@ export default function MapExplorer() {
   // Fly to selected location
   useEffect(() => {
     if (!mapRef.current) return
+    if (!selectedLocation.lat && !selectedLocation.lon) return
     mapRef.current.flyTo([selectedLocation.lat, selectedLocation.lon], 15, { duration: 1.2 })
     setPois([])
     setActiveCategory(null)
     setShowResults(false)
   }, [selectedLocation])
 
-  // Geolocation tracking during nav
+  // Geolocation tracking during nav (high-accuracy, separate from posWatchRef)
   useEffect(() => {
     if (!navMode || !navigator.geolocation) return
     watchIdRef.current = navigator.geolocation.watchPosition(
@@ -442,7 +476,6 @@ export default function MapExplorer() {
         const lon = pos.coords.longitude
         setUserPos([lat, lon])
 
-        // Auto-pan map to follow user
         if (mapRef.current) {
           mapRef.current.setView([lat, lon], 17, { animate: true, duration: 0.5 })
           if (userMarkerRef.current) {
@@ -454,7 +487,6 @@ export default function MapExplorer() {
           }
         }
 
-        // Calculate live distance to next maneuver point
         setCurrentStepIdx(prev => {
           if (navSteps.length === 0 || prev >= navSteps.length - 1) return prev
           const next = navSteps[prev + 1]
@@ -474,7 +506,7 @@ export default function MapExplorer() {
                 : 'Could not get your location.'
         setError(msg)
       },
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 },
     )
     return () => {
       if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current)
@@ -633,21 +665,21 @@ export default function MapExplorer() {
     if (routeLayer) { mapRef.current.removeLayer(routeLayer); setRouteLayer(null) }
     setRouteInfo(null)
     try {
-      const { lat: fLat, lon: fLon } = selectedLocation
+      // Use user GPS position as origin if available, else selectedLocation
+      const fLat = userPos ? userPos[0] : selectedLocation.lat
+      const fLon = userPos ? userPos[1] : selectedLocation.lon
       const url = `https://router.project-osrm.org/route/v1/foot/${fLon},${fLat};${poi.lon},${poi.lat}?overview=full&geometries=geojson&steps=true`
       const res = await fetch(url)
       const data = await res.json()
       if (data.code !== 'Ok') throw new Error('No route')
       const route = data.routes[0]
 
-      // Draw polyline
       const coords: [number, number][] = route.geometry.coordinates.map(([lon, lat]: [number, number]) => [lat, lon])
       const poly = L.polyline(coords, { color: '#2563EB', weight: 5, opacity: 0.85, lineCap: 'round', lineJoin: 'round' }).addTo(mapRef.current)
       setRouteLayer(poly)
       setRouteInfo({ distance: Math.round(route.distance), duration: Math.round(route.duration / 60) })
       mapRef.current.fitBounds(poly.getBounds().pad(0.15))
 
-      // Parse steps
       const steps: NavStep[] = (route.legs[0]?.steps || []).map((step: any) => ({
         instruction: formatInstruction(step),
         distance: Math.round(step.distance),
@@ -675,8 +707,6 @@ export default function MapExplorer() {
     if (routeLayer && mapRef.current) { mapRef.current.removeLayer(routeLayer); setRouteLayer(null) }
     setRouteInfo(null)
     if (watchIdRef.current !== null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null }
-    if (userMarkerRef.current && mapRef.current) { mapRef.current.removeLayer(userMarkerRef.current); userMarkerRef.current = null }
-    setUserPos(null)
   }, [routeLayer])
 
   const clearRoute = () => {
@@ -684,8 +714,40 @@ export default function MapExplorer() {
     setRouteInfo(null)
   }
 
+  const locateMe = useCallback(() => {
+    if (!navigator.geolocation || !mapRef.current) return
+    if (userPos) {
+      mapRef.current.flyTo(userPos, 16, { duration: 1 })
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude
+        const lon = pos.coords.longitude
+        setUserPos([lat, lon])
+        if (!mapRef.current) return
+        mapRef.current.flyTo([lat, lon], 16, { duration: 1 })
+        if (userMarkerRef.current) {
+          userMarkerRef.current.setLatLng([lat, lon])
+        } else {
+          userMarkerRef.current = L.circleMarker([lat, lon], {
+            radius: 10, fillColor: '#2563EB', color: 'white', weight: 3, fillOpacity: 1,
+          }).addTo(mapRef.current)
+        }
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 },
+    )
+  }, [userPos])
+
+  // ── Computed: sorted pois by distance from user ──────────────
+  const sortedPois = [...pois].sort((a, b) => distFromUser(a) - distFromUser(b))
+
+  const distanceLabel = userPos ? 'from your location' : `from ${selectedLocation.name}`
+
+  // ── RENDER ────────────────────────────────────────────────────
   return (
-    <div className="relative flex flex-col h-[calc(100vh-6rem)] bg-background overflow-hidden">
+    <div className="relative h-[calc(100vh-56px)] bg-background overflow-hidden">
 
       {/* Waze-style Nav Banner */}
       <AnimatePresence>
@@ -701,62 +763,126 @@ export default function MapExplorer() {
         )}
       </AnimatePresence>
 
-      {/* Top Bar + Location Picker */}
+      {/* ── Floating Top Bar ── */}
       {!navMode && (
-        <LocationPicker
-          selected={selectedLocation}
-          locations={locations}
-          hotels={trip.hotels}
-          open={showLocationPicker}
-          onToggle={() => setShowLocationPicker(v => !v)}
-          onSelect={loc => { setSelectedLocation(loc); setShowLocationPicker(false) }}
-          radius={radius}
-          radiusOptions={RADIUS_OPTIONS}
-          onRadiusChange={setRadius}
-        />
+        <div className="absolute top-3 left-3 right-3 z-[1010]">
+          <div className="flex gap-2">
+            {/* Location pill */}
+            <button
+              onClick={() => setShowLocationPicker(v => !v)}
+              className="flex-1 flex items-center gap-2.5 bg-background/90 backdrop-blur-xl border border-border/60 rounded-2xl px-3.5 py-2.5 shadow-lg shadow-black/10"
+            >
+              <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                {autoLocating
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                  : <MapPin className="h-3.5 w-3.5 text-primary" />
+                }
+              </div>
+              <div className="flex-1 text-left min-w-0">
+                <p className="text-[10px] text-muted-foreground leading-none mb-0.5">Exploring near</p>
+                <p className="text-sm font-semibold truncate leading-tight">
+                  {autoLocating ? 'Locating…' : selectedLocation.name}
+                </p>
+              </div>
+              <svg className={`h-4 w-4 text-muted-foreground transition-transform shrink-0 ${showLocationPicker ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {/* Radius selector */}
+            <select
+              value={radius}
+              onChange={e => setRadius(Number(e.target.value))}
+              aria-label="Search radius"
+              className="bg-background/90 backdrop-blur-xl border border-border/60 rounded-2xl px-3 py-2.5 text-sm font-semibold shadow-lg shadow-black/10 text-foreground"
+            >
+              {RADIUS_OPTIONS.map(r => (
+                <option key={r} value={r}>
+                  {r >= 1000 ? `${r / 1000}km` : `${r}m`}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Location picker dropdown */}
+          <AnimatePresence>
+            {showLocationPicker && (
+              <motion.div
+                initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.97 }}
+                transition={{ duration: 0.15 }}
+                className="mt-2 bg-background border border-border rounded-2xl shadow-2xl overflow-hidden"
+              >
+                {locations.map(loc => {
+                  const isHotel = trip.hotels.some(h => h.name === loc.name)
+                  const isGps = loc.name === userLocName || loc.name === 'My Location'
+                  const isSelected = selectedLocation.name === loc.name
+                  return (
+                    <button
+                      key={loc.name}
+                      onClick={() => {
+                        setSelectedLocation(loc)
+                        setShowLocationPicker(false)
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors text-left ${isSelected ? 'bg-primary/8' : ''}`}
+                    >
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm shrink-0 ${
+                        isGps ? 'bg-blue-100 dark:bg-blue-900/30' :
+                        isHotel ? 'bg-indigo-100 dark:bg-indigo-900/30' : 'bg-muted'
+                      }`}>
+                        {isGps ? '🎯' : isHotel ? '🏨' : '📍'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{loc.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {isGps ? 'GPS · Live location' : loc.country || 'Hotel'}
+                        </p>
+                      </div>
+                      {isSelected && <div className="w-2 h-2 rounded-full bg-primary shrink-0" />}
+                    </button>
+                  )
+                })}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       )}
 
-      {/* Map */}
-      <div ref={mapElRef} className="flex-1 w-full" style={{ zIndex: 1 }} />
+      {/* ── Map Canvas ── */}
+      <div ref={mapElRef} className="absolute inset-0" style={{ zIndex: 1 }} />
 
-      {/* Locate-me FAB — hidden during nav mode (which auto-follows the user) */}
+      {/* ── Locate FAB ── */}
       {!navMode && (
         <button
           onClick={locateMe}
-          disabled={locating}
           aria-label="Center on my location"
-          className="absolute bottom-[88px] right-3 z-[1002] w-11 h-11 rounded-full bg-background border border-border shadow-lg flex items-center justify-center active:scale-95 transition-transform disabled:opacity-60"
+          className="absolute right-3 z-[1005] w-11 h-11 rounded-full bg-background border border-border shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+          style={{ bottom: showResults ? '292px' : '156px' }}
         >
-          {locating
-            ? <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            : <LocateFixed className="h-5 w-5 text-primary" />
-          }
+          <LocateFixed className={`h-5 w-5 ${userPos ? 'text-primary' : 'text-muted-foreground'}`} />
         </button>
       )}
 
-      {/* Nav bottom ETA bar */}
+      {/* ── Nav ETA bar ── */}
       <AnimatePresence>
         {navMode && routeInfo && (
           <motion.div
             initial={{ y: 80 }}
             animate={{ y: 0 }}
             exit={{ y: 80 }}
-            className="absolute bottom-[72px] left-0 right-0 z-[1002] bg-[#1a1a2e] border-t border-white/10 px-5 py-3 flex items-center justify-between"
+            className="absolute bottom-0 left-0 right-0 z-[1002] bg-[#1a1a2e] border-t border-white/10 px-5 py-4 flex items-center justify-between"
           >
             <div className="text-center">
-              <p className="text-white font-black text-lg leading-none">{routeInfo.duration} min</p>
+              <p className="text-white font-black text-xl leading-none">{routeInfo.duration} min</p>
               <p className="text-white/50 text-xs mt-0.5">walk</p>
             </div>
             <div className="text-center">
-              <p className="text-white font-black text-lg leading-none">
-                {routeInfo.distance >= 1000
-                  ? `${(routeInfo.distance / 1000).toFixed(1)} km`
-                  : `${routeInfo.distance} m`}
-              </p>
+              <p className="text-white font-black text-xl leading-none">{fmtDist(routeInfo.distance)}</p>
               <p className="text-white/50 text-xs mt-0.5">total</p>
             </div>
             <div className="text-center">
-              <p className="text-white font-bold text-lg leading-none">
+              <p className="text-white font-bold text-xl leading-none">
                 {(() => {
                   const eta = new Date(Date.now() + routeInfo.duration * 60000)
                   return eta.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -766,7 +892,7 @@ export default function MapExplorer() {
             </div>
             <button
               onClick={endNavigation}
-              className="bg-red-500/20 text-red-400 text-xs font-bold px-4 py-2 rounded-xl"
+              className="bg-red-500/20 text-red-400 text-sm font-bold px-5 py-2.5 rounded-xl"
             >
               End
             </button>
@@ -774,187 +900,281 @@ export default function MapExplorer() {
         )}
       </AnimatePresence>
 
-      {/* Category Filter Bar — fixed at bottom */}
+      {/* ── Bottom Panel (categories + results) ── */}
       {!navMode && (
-        <div className="absolute bottom-0 left-0 right-0 z-[1000] bg-background/95 backdrop-blur-md border-t border-border px-3 pt-2.5 pb-2.5">
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide">
-            {CATEGORIES.map(cat => {
-              const isActive = activeCategory === cat.id
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => searchCategory(cat.id)}
-                  disabled={loading}
-                  className="flex flex-col items-center gap-1 shrink-0 active:scale-90 transition-transform"
-                >
-                  <div
-                    className="w-11 h-11 rounded-2xl flex items-center justify-center"
-                    style={{
-                      background: isActive ? cat.color : cat.color + '22',
-                      boxShadow: isActive ? `0 3px 10px ${cat.color}55` : 'none',
-                    }}
-                  >
-                    {loading && isActive
-                      ? <Loader2 className="h-4.5 w-4.5 animate-spin text-white" />
-                      : <cat.icon className="h-[18px] w-[18px]" style={{ color: isActive ? 'white' : cat.color }} />
-                    }
-                  </div>
-                  <span className="text-[10px] font-medium leading-none" style={{ color: isActive ? cat.color : 'hsl(var(--muted-foreground))' }}>
-                    {cat.label.split(' ')[0]}
-                  </span>
-                </button>
-              )
-            })}
+        <div className="absolute bottom-0 left-0 right-0 z-[1005] bg-background rounded-t-3xl shadow-2xl border-t border-border">
+          {/* Drag handle */}
+          <div className="flex justify-center pt-2.5 pb-1">
+            <div className="w-10 h-1 bg-border rounded-full" />
           </div>
-        </div>
-      )}
 
-      {/* POI Results Sheet — slides up above filter bar */}
-      {!navMode && (
-        <AnimatePresence>
-          {showResults && pois.length > 0 && (
-            <motion.div
-              initial={{ y: 300 }}
-              animate={{ y: 0 }}
-              exit={{ y: 300 }}
-              transition={{ type: 'spring', damping: 25 }}
-              className="absolute bottom-[72px] left-0 right-0 z-[999] bg-background/95 backdrop-blur-md border-t border-border max-h-56 overflow-y-auto"
-            >
-              <div className="flex items-center justify-between px-4 py-2 border-b border-border/50 sticky top-0 bg-background/95">
-                <p className="text-sm font-semibold">{pois.length} places found</p>
-                <button onClick={() => setShowResults(false)}>
-                  <X className="h-4 w-4 text-muted-foreground" />
-                </button>
-              </div>
-              {pois.map(poi => {
-                const cat = CATEGORIES.find(c => c.id === activeCategory)!
+          {/* Category strip */}
+          <div className="px-3 pb-3 pt-1">
+            <div className="flex gap-2.5 overflow-x-auto scrollbar-hide pb-1">
+              {CATEGORIES.map(cat => {
+                const isActive = activeCategory === cat.id
                 return (
                   <button
-                    key={poi.id}
-                    onClick={() => flyToPoi(poi)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors border-b border-border/30 text-left ${selectedPoi?.id === poi.id ? 'bg-primary/5' : ''}`}
+                    key={cat.id}
+                    onClick={() => searchCategory(cat.id)}
+                    disabled={loading && activeCategory !== cat.id}
+                    className="flex flex-col items-center gap-1.5 shrink-0 active:scale-90 transition-transform min-w-[52px]"
                   >
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: cat.markerColor + '20' }}>
-                      <cat.icon className="h-4 w-4" style={{ color: cat.markerColor }} />
+                    <div
+                      className="w-12 h-12 rounded-2xl flex items-center justify-center transition-all"
+                      style={{
+                        background: isActive ? cat.color : cat.color + '18',
+                        boxShadow: isActive ? `0 4px 14px ${cat.color}55` : 'none',
+                      }}
+                    >
+                      {loading && isActive
+                        ? <Loader2 className="h-5 w-5 animate-spin text-white" />
+                        : <cat.icon
+                            className="h-5 w-5"
+                            style={{ color: isActive ? 'white' : cat.color }}
+                          />
+                      }
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{poi.name}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{poi.type.replace(/_/g, ' ')} · {poi.distance}m away</p>
-                    </div>
-                    <Navigation className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span
+                      className="text-[10px] font-medium leading-none text-center"
+                      style={{ color: isActive ? cat.color : 'hsl(var(--muted-foreground))' }}
+                    >
+                      {cat.label}
+                    </span>
                   </button>
                 )
               })}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      )}
+            </div>
+          </div>
 
-      {/* Error */}
-      {!navMode && error && (
-        <div className="absolute bottom-[80px] left-3 right-3 z-[999] px-4 py-2 bg-destructive/10 text-destructive text-sm rounded-xl text-center">
-          {error}
+          {/* Results list (slides in when available) */}
+          <AnimatePresence>
+            {showResults && sortedPois.length > 0 && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+                className="overflow-hidden"
+              >
+                {/* Results header */}
+                <div className="flex items-center justify-between px-4 py-2 border-t border-border/50">
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    {sortedPois.length} places · {distanceLabel}
+                  </p>
+                  <button onClick={() => setShowResults(false)} className="p-1 rounded-full hover:bg-accent">
+                    <X className="h-3.5 w-3.5 text-muted-foreground" />
+                  </button>
+                </div>
+
+                {/* Scrollable results */}
+                <div className="max-h-[240px] overflow-y-auto">
+                  {sortedPois.map(poi => {
+                    const cat = CATEGORIES.find(c => c.id === activeCategory)!
+                    const d = distFromUser(poi)
+                    const isThisSelected = selectedPoi?.id === poi.id
+                    return (
+                      <button
+                        key={poi.id}
+                        onClick={() => flyToPoi(poi)}
+                        className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-accent transition-colors border-b border-border/20 text-left ${isThisSelected ? 'bg-primary/5' : ''}`}
+                      >
+                        {/* Icon */}
+                        <div
+                          className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+                          style={{ background: cat.markerColor + '18' }}
+                        >
+                          <cat.icon className="h-5 w-5" style={{ color: cat.markerColor }} />
+                        </div>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold truncate">{poi.name}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span
+                              className="text-[10px] font-medium px-1.5 py-0.5 rounded-md capitalize"
+                              style={{ background: cat.markerColor + '18', color: cat.markerColor }}
+                            >
+                              {poi.type.replace(/_/g, ' ')}
+                            </span>
+                            {poi.tags.opening_hours && (
+                              <span className="text-[10px] text-emerald-600 font-medium">· open</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Distance (right-aligned) */}
+                        <div className="flex flex-col items-end shrink-0 gap-1">
+                          <span className="text-sm font-bold text-primary">{fmtDist(d)}</span>
+                          <Navigation className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
 
-      {/* Selected POI Detail Card */}
+      {/* ── POI Detail Bottom Sheet ── */}
       <AnimatePresence>
-        {selectedPoi && (
+        {selectedPoi && !navMode && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className="absolute top-16 right-3 z-[1002] bg-background border border-border rounded-2xl shadow-xl p-4 max-w-[220px]"
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+            className="absolute left-0 right-0 z-[1020] bg-background rounded-t-3xl shadow-2xl border-t border-border"
+            style={{ bottom: showResults ? '0' : '0' }}
           >
-            <button
-              onClick={() => setSelectedPoi(null)}
-              className="absolute top-2 right-2 p-1 rounded-full hover:bg-accent"
-            >
-              <X className="h-3.5 w-3.5 text-muted-foreground" />
-            </button>
-            <div className="pr-5">
-              <p className="text-sm font-bold leading-tight">{selectedPoi.name}</p>
-              <p className="text-xs text-muted-foreground capitalize mt-0.5">{selectedPoi.type.replace(/_/g, ' ')}</p>
-              <p className="text-xs text-primary font-medium mt-1">{selectedPoi.distance}m away</p>
-              {/* Save / Unsave button */}
+            {/* Handle */}
+            <div className="flex justify-center pt-2.5 pb-1">
+              <div className="w-10 h-1 bg-border rounded-full" />
+            </div>
+
+            <div className="px-5 pb-6 pt-2">
+              {/* Close */}
               <button
-                onClick={() => {
-                  if (selectedPoi && isSaved(selectedPoi.id)) {
-                    unsavePlace(selectedPoi.id)
-                  } else if (selectedPoi) {
-                    setSaveRating(5)
-                    setSaveNotes('')
-                    setSaveSheet(selectedPoi)
-                  }
-                }}
-                className={`flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
-                  selectedPoi && isSaved(selectedPoi.id)
-                    ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600'
-                    : 'bg-muted text-muted-foreground hover:text-foreground'
-                }`}
+                onClick={() => setSelectedPoi(null)}
+                className="absolute top-4 right-4 w-7 h-7 rounded-full bg-muted flex items-center justify-center"
               >
-                {selectedPoi && isSaved(selectedPoi.id)
-                  ? <><BookmarkCheck className="h-3.5 w-3.5" /> Saved</>
-                  : <><Bookmark className="h-3.5 w-3.5" /> Save Place</>
-                }
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
-              {selectedPoi && isSaved(selectedPoi.id) && (() => {
+
+              {/* Name + type */}
+              <div className="pr-8 mb-3">
+                <h3 className="text-base font-bold leading-snug">{selectedPoi.name}</h3>
+                <div className="flex items-center gap-2 mt-1">
+                  {(() => {
+                    const cat = CATEGORIES.find(c => c.id === activeCategory)
+                    return cat ? (
+                      <span
+                        className="text-[11px] font-semibold px-2 py-0.5 rounded-lg capitalize"
+                        style={{ background: cat.markerColor + '20', color: cat.markerColor }}
+                      >
+                        {selectedPoi.type.replace(/_/g, ' ')}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground capitalize">{selectedPoi.type.replace(/_/g, ' ')}</span>
+                    )
+                  })()}
+                  {/* Live distance */}
+                  <span className="text-sm font-bold text-emerald-600">
+                    {fmtDist(distFromUser(selectedPoi))}
+                  </span>
+                  <span className="text-xs text-muted-foreground">away</span>
+                </div>
+              </div>
+
+              {/* Details row */}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3">
+                {selectedPoi.tags.opening_hours && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    🕐 {selectedPoi.tags.opening_hours}
+                  </span>
+                )}
+                {selectedPoi.tags.cuisine && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground capitalize">
+                    🍽 {selectedPoi.tags.cuisine}
+                  </span>
+                )}
+                {selectedPoi.tags.phone && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    📞 {selectedPoi.tags.phone}
+                  </span>
+                )}
+              </div>
+
+              {/* Saved rating */}
+              {isSaved(selectedPoi.id) && (() => {
                 const sp = savedPlaces.find(s => s.osm_id === selectedPoi.id)
                 return sp ? (
-                  <div className="flex gap-0.5 mt-1">
-                    {[1,2,3,4,5].map(n => (
-                      <Star key={n} className={`h-3 w-3 ${n <= sp.rating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}`} />
+                  <div className="flex gap-0.5 mb-3">
+                    {[1, 2, 3, 4, 5].map(n => (
+                      <Star key={n} className={`h-4 w-4 ${n <= sp.rating ? 'fill-amber-400 text-amber-400' : 'text-muted-foreground/30'}`} />
                     ))}
                   </div>
                 ) : null
               })()}
-              {selectedPoi.tags.opening_hours && (
-                <p className="text-xs text-muted-foreground mt-1">🕐 {selectedPoi.tags.opening_hours}</p>
+
+              {/* Route summary if available */}
+              {routeInfo && (
+                <div className="flex items-center gap-3 bg-primary/5 rounded-xl px-3 py-2 mb-3">
+                  <Footprints className="h-4 w-4 text-primary shrink-0" />
+                  <span className="text-sm font-semibold text-primary">{fmtDist(routeInfo.distance)}</span>
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">{routeInfo.duration} min walk</span>
+                </div>
               )}
-              {selectedPoi.tags.phone && (
-                <p className="text-xs text-muted-foreground mt-0.5">📞 {selectedPoi.tags.phone}</p>
-              )}
-              {selectedPoi.tags.cuisine && (
-                <p className="text-xs text-muted-foreground mt-0.5 capitalize">🍽 {selectedPoi.tags.cuisine}</p>
-              )}
-            </div>
-            {routeInfo && (
-              <div className="mt-2 flex gap-2">
-                <span className="flex items-center gap-1 text-xs font-semibold text-primary">
-                  <Footprints className="h-3 w-3" />{routeInfo.distance}m
-                </span>
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Clock className="h-3 w-3" />{routeInfo.duration} min walk
-                </span>
+
+              {/* Action buttons */}
+              <div className="flex gap-2.5">
+                {/* Save/Unsave */}
+                <button
+                  onClick={() => {
+                    if (isSaved(selectedPoi.id)) {
+                      unsavePlace(selectedPoi.id)
+                    } else {
+                      setSaveRating(5)
+                      setSaveNotes('')
+                      setSaveSheet(selectedPoi)
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                    isSaved(selectedPoi.id)
+                      ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-600'
+                      : 'bg-muted text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {isSaved(selectedPoi.id)
+                    ? <><BookmarkCheck className="h-4 w-4" /> Saved</>
+                    : <><Bookmark className="h-4 w-4" /> Save</>
+                  }
+                </button>
+
+                {/* Navigate / End Nav */}
+                {navMode ? (
+                  <button
+                    onClick={endNavigation}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-destructive text-white text-sm font-bold"
+                  >
+                    <X className="h-4 w-4" /> End Navigation
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => navigateToPoi(selectedPoi)}
+                    disabled={navigating}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-white text-sm font-bold disabled:opacity-60"
+                  >
+                    {navigating
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <Navigation className="h-4 w-4" />
+                    }
+                    {navigating ? 'Routing…' : 'Navigate →'}
+                  </button>
+                )}
+
+                {/* Clear route */}
+                {routeInfo && !navMode && (
+                  <button onClick={clearRoute} className="px-3 py-2.5 rounded-xl bg-muted text-xs font-medium">
+                    Clear
+                  </button>
+                )}
               </div>
-            )}
-            <div className="mt-3 flex gap-2">
-              {navMode ? (
-                <button
-                  onClick={endNavigation}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-destructive text-white text-xs font-bold"
-                >
-                  <X className="h-3.5 w-3.5" /> End Nav
-                </button>
-              ) : (
-                <button
-                  onClick={() => navigateToPoi(selectedPoi)}
-                  disabled={navigating}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-primary text-white text-xs font-bold disabled:opacity-60"
-                >
-                  {navigating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Navigation className="h-3.5 w-3.5" />}
-                  {navigating ? 'Routing…' : 'Navigate'}
-                </button>
-              )}
-              {routeInfo && !navMode && (
-                <button onClick={clearRoute} className="px-3 py-2 rounded-xl bg-muted text-xs font-medium">
-                  Clear
-                </button>
-              )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Error toast ── */}
+      {!navMode && error && (
+        <div className="absolute top-24 left-3 right-3 z-[1025] px-4 py-2.5 bg-destructive/10 text-destructive text-sm rounded-xl text-center shadow-lg">
+          {error}
+          <button onClick={() => setError(null)} className="ml-2 font-bold">✕</button>
+        </div>
+      )}
 
       {/* Save Place Sheet */}
       <AnimatePresence>
