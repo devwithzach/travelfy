@@ -48,7 +48,15 @@ function AppRoutes() {
     )
   }
 
-  if (!user) return <Login />
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    )
+  }
 
   return (
     <TripProvider>
@@ -88,9 +96,6 @@ export default function App() {
         <AuthProvider>
           <BrowserRouter>
             <Routes>
-              {/* Public landing page — no auth required */}
-              <Route path="/landing" element={<Landing />} />
-              {/* All other routes (auth-gated via AppRoutes) */}
               <Route path="*" element={<AppRoutes />} />
             </Routes>
             <InstallPrompt />
