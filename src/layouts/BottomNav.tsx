@@ -48,7 +48,7 @@ export default function BottomNav() {
   }
 
   return (
-    <>
+    <div className="lg:hidden">
       {/* More Drawer Backdrop */}
       <AnimatePresence>
         {moreOpen && (
@@ -111,7 +111,7 @@ export default function BottomNav() {
       </AnimatePresence>
 
       {/* Bottom Nav Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-[1500] bg-background/95 backdrop-blur-lg border-t border-border safe-bottom">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-[1500] bg-background/95 backdrop-blur-lg border-t border-border safe-bottom">
         <div className="flex px-2 py-1">
           {visibleMain.map(({ to, icon: Icon, label }) => (
             <NavLink
@@ -163,6 +163,6 @@ export default function BottomNav() {
           )}
         </div>
       </nav>
-    </>
+    </div>
   )
 }

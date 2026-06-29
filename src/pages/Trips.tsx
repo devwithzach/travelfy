@@ -5,6 +5,7 @@ import { Plus, Plane, Loader2, Sparkles } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTrip } from '@/contexts/TripContext'
 import BottomNav from '@/layouts/BottomNav'
+import SideNav from '@/layouts/SideNav'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -102,10 +103,12 @@ export default function Trips() {
   const userEmail = user?.email ?? ''
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-background lg:flex">
+      <SideNav />
+      <div className="flex-1 flex flex-col min-w-0 pb-24 lg:pb-0">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-lg border-b border-border px-4 pt-safe-top">
-        <div className="max-w-lg mx-auto py-4 flex items-center justify-between">
+        <div className="max-w-2xl mx-auto py-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">My Trips</h1>
             {userEmail && (
@@ -126,7 +129,7 @@ export default function Trips() {
       </div>
 
       {/* Content */}
-      <div className="max-w-lg mx-auto px-4 py-6">
+      <div className="max-w-2xl mx-auto px-4 py-6 w-full">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -300,6 +303,7 @@ export default function Trips() {
       </Dialog>
 
       <BottomNav />
+      </div>
     </div>
   )
 }
