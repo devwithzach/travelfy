@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Loader2, Check, LogOut, Sun, Moon, Monitor, Mail, User as UserIcon, ArrowLeftRight } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useTrip } from '@/contexts/TripContext'
@@ -19,7 +20,8 @@ interface Props {
 export default function ProfileSheet({ open, onClose, initialName }: Props) {
   const { user, signOut, updateDisplayName } = useAuth()
   const { theme, setTheme } = useTheme()
-  const { activeTripId, exitTrip, trip } = useTrip()
+  const { activeTripId, trip } = useTrip()
+  const navigate = useNavigate()
 
   const metaName = (user?.user_metadata?.full_name as string | undefined) ?? ''
   const seedName = (initialName?.trim() || metaName || '').trim()
@@ -152,15 +154,15 @@ export default function ProfileSheet({ open, onClose, initialName }: Props) {
               </Button>
             </div>
 
-            {/* Exit current trip (in-trip only) — drops back to the lobby so
-                the user can focus on a different trip without deleting this one. */}
+            {/* Switch trip — navigates to the trips list while keeping the
+                current trip selected so the user can choose a different one. */}
             {activeTripId && (
               <button
-                onClick={() => { onClose(); exitTrip() }}
+                onClick={() => { onClose(); navigate('/trips') }}
                 className="w-full flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-foreground hover:bg-accent transition-colors border border-border"
               >
                 <ArrowLeftRight className="h-4 w-4 text-primary" />
-                <span className="flex-1 text-left">Exit trip</span>
+                <span className="flex-1 text-left">Switch trip</span>
                 {trip.tripInfo.name && (
                   <span className="text-xs text-muted-foreground truncate max-w-[150px]">{trip.tripInfo.name}</span>
                 )}
