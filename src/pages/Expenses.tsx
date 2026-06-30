@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { DollarSign, Plus, Trash2, Edit2, TrendingUp } from 'lucide-react'
+import { DollarSign, Plus, Trash2, Edit2, TrendingUp, X } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { useTrip } from '@/contexts/TripContext'
 import type { Expense } from '@/types'
@@ -8,10 +8,8 @@ import PageHeader from '@/components/common/PageHeader'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -290,63 +288,146 @@ export default function Expenses() {
         </Tabs>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editing && expenses.find(e => e.id === editing.id) ? 'Edit Expense' : 'Add Expense'}</DialogTitle>
-          </DialogHeader>
-          {editing && (
-            <div className="grid gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Title</Label>
-                <Input value={editing.title} onChange={e => setEditing({ ...editing, title: e.target.value })} placeholder="Dinner at local restaurant" />
+      {/* ── Expense Bottom Sheet ── */}
+      <AnimatePresence>
+        {dialogOpen && (
+          <>
+            <motion.div
+              key="exp-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+              onClick={() => setDialogOpen(false)}
+            />
+            <motion.div
+              key="exp-sheet"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 z-[51] bg-background rounded-t-3xl shadow-2xl max-h-[92vh] overflow-y-auto"
+            >
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 rounded-full bg-border" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Amount</Label>
-                  <Input type="number" value={editing.amount || ''} onChange={e => setEditing({ ...editing, amount: parseFloat(e.target.value) || 0 })} placeholder="0" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Currency</Label>
-                  <Select value={editing.currency} onValueChange={v => setEditing({ ...editing, currency: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {['PHP', 'HKD', 'MOP', 'USD', 'EUR'].map(c => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
+              <div className="flex items-center justify-between px-5 py-3">
+                <h2 className="text-base font-bold">
+                  {editing && expenses.find(e => e.id === editing.id) ? 'Edit Expense' : 'Add Expense'}
+                </h2>
+                <button
+                  onClick={() => setDialogOpen(false)}
+                  className="w-8 h-8 rounded-full bg-muted flex items-center justify-center"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {editing && (
+                <div className="px-5 pb-8 space-y-4">
+                  {/* Title */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Title</Label>
+                    <input
+                      type="text"
+                      value={editing.title}
+                      onChange={e => setEditing({ ...editing, title: e.target.value })}
+                      placeholder="Dinner at local restaurant"
+                      className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </div>
+
+                  {/* Amount + Date */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground uppercase tracking-wide">Amount</Label>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        value={editing.amount || ''}
+                        onChange={e => setEditing({ ...editing, amount: parseFloat(e.target.value) || 0 })}
+                        placeholder="0"
+                        className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground uppercase tracking-wide">Date</Label>
+                      <input
+                        type="date"
+                        value={editing.date}
+                        onChange={e => setEditing({ ...editing, date: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Currency — tap chips */}
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Currency</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {['PHP', 'HKD', 'MOP', 'USD', 'EUR', 'GBP', 'JPY', 'SGD', 'AUD', 'CAD'].map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setEditing({ ...editing, currency: c })}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all active:scale-95 ${
+                            editing.currency === c
+                              ? 'bg-primary text-white border-primary shadow-sm'
+                              : 'bg-muted border-border text-muted-foreground hover:border-primary/40'
+                          }`}
+                        >
+                          {c}
+                        </button>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Category</Label>
-                  <Select value={editing.category} onValueChange={(v: Expense['category']) => setEditing({ ...editing, category: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
+                    </div>
+                  </div>
+
+                  {/* Category — tap chips */}
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Category</Label>
+                    <div className="flex flex-wrap gap-2">
                       {Object.entries(CATEGORY_CONFIG).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v.label}</SelectItem>
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => setEditing({ ...editing, category: k as Expense['category'] })}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${
+                            editing.category === k
+                              ? 'text-white border-transparent shadow-sm'
+                              : 'bg-muted border-border text-muted-foreground hover:border-primary/40'
+                          }`}
+                          style={editing.category === k ? { backgroundColor: v.color, borderColor: v.color } : {}}
+                        >
+                          {v.label}
+                        </button>
                       ))}
-                    </SelectContent>
-                  </Select>
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Notes</Label>
+                    <textarea
+                      value={editing.notes}
+                      onChange={e => setEditing({ ...editing, notes: e.target.value })}
+                      placeholder="Optional notes..."
+                      rows={2}
+                      className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                    />
+                  </div>
+
+                  <button
+                    onClick={save}
+                    className="w-full py-4 rounded-2xl gradient-brand text-white font-bold text-sm active:scale-[0.98] transition-transform"
+                  >
+                    Save Expense
+                  </button>
                 </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Date</Label>
-                  <Input type="date" value={editing.date} onChange={e => setEditing({ ...editing, date: e.target.value })} />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Notes</Label>
-                <Textarea value={editing.notes} onChange={e => setEditing({ ...editing, notes: e.target.value })} placeholder="Optional notes..." rows={2} />
-              </div>
-            </div>
-          )}
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={save}>Save Expense</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Receipt lightbox — tap thumbnail on an expense row to open. */}
       {receiptView && (

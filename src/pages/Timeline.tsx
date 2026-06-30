@@ -2,18 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Map, Plus, Edit2, Trash2, ChevronDown, ChevronUp,
-  Utensils, Bus, Landmark, Hotel, ShoppingBag, Clock, Star, MoreHorizontal, Check, Circle, ArrowDownToLine
+  Utensils, Bus, Landmark, Hotel, ShoppingBag, Star, MoreHorizontal, Check, Circle, ArrowDownToLine, X, MapPin,
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import type { ItineraryDay, ItineraryActivity } from '@/types'
-import PageHeader from '@/components/common/PageHeader'
-import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatDayDate } from '@/utils/dateUtils'
 import { cn } from '@/utils/cn'
@@ -305,19 +300,28 @@ export default function Timeline() {
 
   return (
     <div>
-      <PageHeader
-        title="Timeline"
-        subtitle={subtitle}
-        icon={Map}
-        iconColor="text-emerald-600"
-        action={
-          <Button size="icon-sm" onClick={openAddDay}>
-            <Plus className="h-4 w-4" />
-          </Button>
-        }
-      />
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between px-4 pt-4 pb-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 flex items-center justify-center shrink-0">
+            <Map className="h-5 w-5 text-emerald-600" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold leading-tight">Timeline</h1>
+            <p className="text-xs text-muted-foreground leading-none mt-0.5">{subtitle}</p>
+          </div>
+        </div>
+        <Button
+          size="icon-sm"
+          onClick={openAddDay}
+          className="gradient-brand text-white border-0 shadow-sm"
+          aria-label="Add day"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+      </div>
 
-      <div className="px-4 space-y-3">
+      <div className="px-4 space-y-3 pb-6">
         <AnimatePresence>
           {trip.itinerary.map((day, i) => {
             const isExpanded = expandedDays.has(day.id)
@@ -327,6 +331,7 @@ export default function Timeline() {
             // A day with date in the past counts as fully done even if it has zero activities.
             const allDone = phase === 'past' || (total > 0 && doneCount === total)
             const isToday = phase === 'today'
+
             return (
               <motion.div
                 key={day.id}
@@ -336,84 +341,63 @@ export default function Timeline() {
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ delay: i * 0.05 }}
               >
-                <Card className={cn(
-                  'overflow-hidden',
+                <div className={cn(
+                  'rounded-2xl bg-card border border-border overflow-hidden shadow-sm',
+                  isToday && 'ring-2 ring-primary/30 shadow-md',
                   allDone && 'opacity-70',
-                  isToday && 'ring-2 ring-primary/40 shadow-md'
                 )}>
-                  {/* Day Header */}
+                  {/* ── Day Header ── */}
                   <div
-                    className="flex items-center p-4 cursor-pointer select-none"
+                    className="flex items-center gap-3 p-4 cursor-pointer select-none"
                     onClick={() => toggleDay(day.id)}
                   >
+                    {/* Day badge */}
                     <div className={cn(
-                      'w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold mr-3 shrink-0',
-                      allDone ? 'bg-emerald-500' : isToday ? 'bg-primary animate-pulse' : 'gradient-brand'
+                      'w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold shrink-0',
+                      allDone
+                        ? 'bg-emerald-500'
+                        : isToday
+                        ? 'bg-primary animate-pulse'
+                        : 'gradient-brand',
                     )}>
-                      {allDone ? <Check className="h-5 w-5" strokeWidth={3} /> : day.dayNumber}
+                      {allDone
+                        ? <Check className="h-5 w-5" strokeWidth={3} />
+                        : <span className="text-sm font-bold">{day.dayNumber}</span>
+                      }
                     </div>
+
+                    {/* Center info */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className={cn('font-bold text-sm truncate', allDone && 'line-through')}>{day.title}</p>
-                        {allDone ? (
-                          <Badge className="text-[9px] px-1.5 py-0 bg-emerald-500 text-white border-0 uppercase tracking-wider">Done</Badge>
-                        ) : isToday ? (
-                          <Badge className="text-[9px] px-1.5 py-0 bg-primary text-white border-0 uppercase tracking-wider flex items-center gap-1">
-                            <Circle className="h-2 w-2 fill-current animate-pulse" /> Ongoing
-                          </Badge>
-                        ) : phase === 'future' ? (
-                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 uppercase tracking-wider">Upcoming</Badge>
-                        ) : null}
-                      </div>
-                      <p className="text-xs text-muted-foreground">{day.date ? formatDayDate(day.date) : day.subtitle}</p>
-                      {day.meals.length > 0 && (
-                        <div className="flex gap-1 mt-1">
-                          {day.meals.map(m => (
-                            <Badge key={m} variant="secondary" className="text-[10px] px-1.5 py-0">{m}</Badge>
-                          ))}
+                      <p className={cn(
+                        'font-bold text-sm truncate leading-tight',
+                        allDone && 'line-through text-muted-foreground',
+                      )}>
+                        {day.title || `Day ${day.dayNumber}`}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-none">
+                        {day.date ? formatDayDate(day.date) : day.subtitle || 'No date set'}
+                      </p>
+                      {/* Progress bar */}
+                      {total > 0 && (
+                        <div className="mt-1.5 h-1 rounded-full bg-border overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                            style={{ width: `${(doneCount / total) * 100}%` }}
+                          />
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-1 ml-2">
-                      <span className={cn(
-                        'text-xs',
-                        allDone ? 'text-emerald-600 font-semibold' : 'text-muted-foreground'
-                      )}>
-                        {total > 0 ? `${doneCount}/${total}` : '0'}
-                      </span>
-                      {total > 0 && (
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={e => { e.stopPropagation(); markDayDone(day, !allDone) }}
-                          className="h-7 w-7"
-                          aria-label={allDone ? 'Reopen day' : 'Mark all activities done'}
-                          title={allDone ? 'Reopen day' : 'Mark all activities done'}
-                        >
-                          <Check className={cn('h-3.5 w-3.5', allDone ? 'text-emerald-600' : 'text-muted-foreground')} strokeWidth={3} />
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={e => { e.stopPropagation(); openEditDay(day) }}
-                        className="h-7 w-7"
-                      >
-                        <Edit2 className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={e => { e.stopPropagation(); removeDay(day.id) }}
-                        className="h-7 w-7"
-                      >
-                        <Trash2 className="h-3 w-3 text-destructive" />
-                      </Button>
-                      {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+
+                    {/* Chevron only */}
+                    <div className="shrink-0 text-muted-foreground">
+                      {isExpanded
+                        ? <ChevronUp className="h-4 w-4" />
+                        : <ChevronDown className="h-4 w-4" />
+                      }
                     </div>
                   </div>
 
-                  {/* Activities */}
+                  {/* ── Activities ── */}
                   <AnimatePresence>
                     {isExpanded && (
                       <motion.div
@@ -421,123 +405,220 @@ export default function Timeline() {
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="overflow-hidden border-t"
+                        className="overflow-hidden"
                       >
-                        <div className="p-4 pt-3 space-y-3">
-                          {day.activities.map((act, ai) => {
-                            const cfg = activityTypeConfig[act.type]
-                            const Icon = cfg.icon
-                            const done = isDone(act, day)
-                            const manualOnly = !!act.done && !autoIsActivityDone(act, day, now)
-                            const inProgress = !done && act.id === inProgressId
-                            return (
-                              <div key={act.id} className={cn(
-                                'flex items-start gap-3 rounded-xl -mx-1 px-1 transition-all',
-                                done && 'opacity-50',
-                                inProgress && 'bg-primary/5 ring-1 ring-primary/30 py-1.5'
-                              )}>
-                                <button
-                                  onClick={() => toggleManualDone(day.id, act.id)}
-                                  aria-label={done ? 'Mark as not done' : 'Mark as done'}
-                                  title={done ? (manualOnly ? 'Manually marked done — tap to undo' : 'Auto-detected as past — tap to override') : 'Tap to mark done'}
-                                  className="flex flex-col items-center shrink-0 group focus:outline-none"
-                                >
-                                  <div className={cn(
-                                    'p-1.5 rounded-lg relative transition-colors',
-                                    done
-                                      ? 'bg-emerald-100 dark:bg-emerald-900/30 group-hover:bg-emerald-200 dark:group-hover:bg-emerald-900/50'
-                                      : cfg.color.split(' ').slice(1).join(' ') + ' group-hover:ring-2 group-hover:ring-emerald-400/40'
-                                  )}>
-                                    {done
-                                      ? <Check className="h-3.5 w-3.5 text-emerald-600" strokeWidth={3} />
-                                      : <Icon className={cn('h-3.5 w-3.5', cfg.color.split(' ')[0])} />
-                                    }
-                                  </div>
-                                  {ai < day.activities.length - 1 && (
-                                    <div className="w-[2px] h-4 bg-border mt-1" />
-                                  )}
-                                </button>
-                                <div className="flex-1 min-w-0 pb-1">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
-                                        {act.time && (
-                                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                            <Clock className="h-3 w-3" />
-                                            <span className="font-mono">
-                                              {act.time.includes(':') ? (() => {
-                                                const [h, m] = act.time.split(':').map(Number)
-                                                const p = h >= 12 ? 'PM' : 'AM'
-                                                return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${p}`
-                                              })() : act.time}
-                                            </span>
-                                          </div>
-                                        )}
-                                        {inProgress && (
-                                          <Badge className="text-[9px] px-1.5 py-0 bg-primary text-white border-0 uppercase tracking-wider flex items-center gap-1">
-                                            <Circle className="h-2 w-2 fill-current animate-pulse" /> Now
-                                          </Badge>
-                                        )}
-                                        {manualOnly && (
-                                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Marked</Badge>
-                                        )}
-                                      </div>
-                                      <p className={cn('text-sm font-medium truncate', done && 'line-through')}>{act.title}</p>
-                                      {act.description && (
-                                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{act.description}</p>
-                                      )}
-                                      {act.location && (
-                                        <p className="text-xs text-primary mt-0.5">📍 {act.location}</p>
-                                      )}
-                                    </div>
-                                    <div className="flex gap-1 shrink-0">
-                                      <Button variant="ghost" size="icon-sm" className="h-6 w-6" onClick={() => openEditActivity(day.id, act)}>
-                                        <Edit2 className="h-3 w-3" />
-                                      </Button>
-                                      <Button variant="ghost" size="icon-sm" className="h-6 w-6" onClick={() => removeActivity(day.id, act.id)}>
-                                        <Trash2 className="h-3 w-3 text-destructive" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )
-                          })}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full h-8 text-xs border-dashed"
-                            onClick={() => openAddActivity(day.id)}
-                          >
-                            <Plus className="h-3.5 w-3.5 mr-1" />
-                            Add Activity
-                          </Button>
+                        <div className="border-t border-border px-4 pt-3 pb-0">
+                          {/* Hotel banner */}
                           {day.hotel && (
-                            <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-2.5 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400">
+                            <div className="mb-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl px-3 py-2 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400">
                               <Hotel className="h-3.5 w-3.5 shrink-0" />
                               <span>Staying at: <strong>{day.hotel}</strong></span>
                             </div>
                           )}
+
+                          {/* Activity list */}
+                          {day.activities.length > 0 && (
+                            <div className="space-y-0">
+                              {day.activities.map((act, ai) => {
+                                const cfg = activityTypeConfig[act.type]
+                                const Icon = cfg.icon
+                                const done = isDone(act, day)
+                                const manualOnly = !!act.done && !autoIsActivityDone(act, day, now)
+                                const inProgress = !done && act.id === inProgressId
+                                const isLast = ai === day.activities.length - 1
+
+                                return (
+                                  <div key={act.id} className="flex gap-3">
+                                    {/* Timeline column */}
+                                    <div className="flex flex-col items-center shrink-0 w-8">
+                                      {/* Icon circle — also acts as done toggle */}
+                                      <button
+                                        onClick={() => toggleManualDone(day.id, act.id)}
+                                        aria-label={done ? 'Mark as not done' : 'Mark as done'}
+                                        title={done
+                                          ? (manualOnly ? 'Manually marked done — tap to undo' : 'Auto-detected as past — tap to override')
+                                          : 'Tap to mark done'
+                                        }
+                                        className={cn(
+                                          'w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors focus:outline-none',
+                                          done
+                                            ? 'bg-emerald-100 dark:bg-emerald-900/30'
+                                            : cfg.color.split(' ').slice(1).join(' '),
+                                        )}
+                                      >
+                                        {done
+                                          ? <Check className="h-3.5 w-3.5 text-emerald-600" strokeWidth={3} />
+                                          : <Icon className={cn('h-3.5 w-3.5', cfg.color.split(' ')[0])} />
+                                        }
+                                      </button>
+                                      {/* Connector line */}
+                                      {!isLast && (
+                                        <div className="w-0.5 flex-1 bg-border my-1" style={{ minHeight: '16px' }} />
+                                      )}
+                                    </div>
+
+                                    {/* Content */}
+                                    <div className={cn(
+                                      'flex-1 min-w-0 pb-3 group',
+                                      isLast && 'pb-2',
+                                    )}>
+                                      <div className={cn(
+                                        'rounded-xl px-3 py-2.5 transition-all',
+                                        inProgress && 'bg-primary/5 ring-1 ring-primary/20',
+                                        done && 'opacity-60',
+                                      )}>
+                                        {/* Top row: time pill + title + actions */}
+                                        <div className="flex items-start gap-2">
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                              {act.time && (
+                                                <span className="bg-muted text-xs font-mono px-2 py-0.5 rounded-full text-muted-foreground tabular-nums">
+                                                  {act.time.includes(':') ? (() => {
+                                                    const [h, m] = act.time.split(':').map(Number)
+                                                    const p = h >= 12 ? 'PM' : 'AM'
+                                                    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${p}`
+                                                  })() : act.time}
+                                                </span>
+                                              )}
+                                              {inProgress && (
+                                                <Badge className="text-[9px] px-1.5 py-0 bg-primary text-white border-0 uppercase tracking-wider flex items-center gap-1">
+                                                  <Circle className="h-2 w-2 fill-current animate-pulse" /> Now
+                                                </Badge>
+                                              )}
+                                              {manualOnly && (
+                                                <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Marked</Badge>
+                                              )}
+                                            </div>
+                                            <p className={cn(
+                                              'text-sm font-semibold leading-tight',
+                                              done && 'line-through',
+                                            )}>
+                                              {act.title}
+                                            </p>
+                                            {act.description && (
+                                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
+                                                {act.description}
+                                              </p>
+                                            )}
+                                            {act.location && (
+                                              <p className="text-xs text-primary mt-0.5 flex items-center gap-1">
+                                                <MapPin className="h-3 w-3 shrink-0" />
+                                                {act.location}
+                                              </p>
+                                            )}
+                                          </div>
+
+                                          {/* Edit / Delete — smaller, always visible on mobile */}
+                                          <div className="flex gap-1 shrink-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                            <Button
+                                              variant="ghost"
+                                              size="icon-sm"
+                                              className="h-7 w-7"
+                                              onClick={() => openEditActivity(day.id, act)}
+                                              aria-label="Edit activity"
+                                            >
+                                              <Edit2 className="h-3 w-3" />
+                                            </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="icon-sm"
+                                              className="h-7 w-7"
+                                              onClick={() => removeActivity(day.id, act.id)}
+                                              aria-label="Delete activity"
+                                            >
+                                              <Trash2 className="h-3 w-3 text-destructive" />
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+
+                          {/* ── Action row ── */}
+                          <div className="flex items-center gap-2 py-2 border-t border-border mt-1">
+                            {/* Add activity — flex-1, dashed */}
+                            <button
+                              onClick={() => openAddActivity(day.id)}
+                              className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-xl border border-dashed border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-accent transition-all active:scale-[0.98]"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              Add Activity
+                            </button>
+
+                            {/* Edit day */}
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="h-9 w-9 shrink-0"
+                              onClick={() => openEditDay(day)}
+                              aria-label="Edit day"
+                              title="Edit day"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </Button>
+
+                            {/* Mark all done */}
+                            {total > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="h-9 w-9 shrink-0"
+                                onClick={() => markDayDone(day, !allDone)}
+                                aria-label={allDone ? 'Reopen day' : 'Mark all done'}
+                                title={allDone ? 'Reopen day' : 'Mark all activities done'}
+                              >
+                                <Check className={cn('h-3.5 w-3.5', allDone ? 'text-emerald-600' : 'text-muted-foreground')} strokeWidth={3} />
+                              </Button>
+                            )}
+
+                            {/* Delete day */}
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="h-9 w-9 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => removeDay(day.id)}
+                              aria-label="Delete day"
+                              title="Delete day"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
-                </Card>
+                </div>
               </motion.div>
             )
           })}
         </AnimatePresence>
 
+        {/* ── Empty state ── */}
         {trip.itinerary.length === 0 && (
-          <div className="text-center py-16 text-muted-foreground">
-            <Map className="h-12 w-12 mx-auto mb-3 opacity-20" />
-            <p className="font-medium">No itinerary yet</p>
-            <p className="text-sm mt-1">Tap + to add your first day</p>
+          <div className="flex flex-col items-center justify-center py-24 gap-4 px-8 text-center">
+            <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center">
+              <Map className="h-10 w-10 text-primary/40" />
+            </div>
+            <div>
+              <p className="font-bold text-lg">No itinerary yet</p>
+              <p className="text-sm text-muted-foreground mt-1">Add days to plan your trip step by step</p>
+            </div>
+            <button
+              onClick={openAddDay}
+              className="gradient-brand text-white font-bold px-6 py-3 rounded-2xl shadow-md active:scale-[0.98] transition-transform text-sm flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Add First Day
+            </button>
           </div>
         )}
       </div>
 
-      {/* Floating "Jump to today" button */}
+      {/* ── Floating "Jump to today" button ── */}
       <AnimatePresence>
         {todayDayId && showJumpToToday && (
           <motion.button
@@ -553,121 +634,256 @@ export default function Timeline() {
         )}
       </AnimatePresence>
 
-      {/* Day Dialog */}
-      <Dialog open={dayDialogOpen} onOpenChange={setDayDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editingDay && trip.itinerary.find(d => d.id === editingDay.id) ? 'Edit Day' : 'Add Day'}</DialogTitle>
-          </DialogHeader>
-          {editingDay && (
-            <div className="grid gap-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Day Number</Label>
-                  <Input type="number" value={editingDay.dayNumber} onChange={e => setEditingDay({ ...editingDay, dayNumber: parseInt(e.target.value) || 1 })} min={1} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Date</Label>
-                  <Input type="date" value={editingDay.date} onChange={e => setEditingDay({ ...editingDay, date: e.target.value })} />
-                </div>
+      {/* ── Day Bottom Sheet ── */}
+      <AnimatePresence>
+        {dayDialogOpen && (
+          <>
+            <motion.div
+              key="day-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+              onClick={() => setDayDialogOpen(false)}
+            />
+            <motion.div
+              key="day-sheet"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 z-[51] bg-background rounded-t-3xl shadow-2xl max-h-[92vh] overflow-y-auto"
+            >
+              {/* Handle */}
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 rounded-full bg-border" />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Title</Label>
-                <Input value={editingDay.title} onChange={e => setEditingDay({ ...editingDay, title: e.target.value })} placeholder="Manila → Hong Kong" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Subtitle</Label>
-                <Input value={editingDay.subtitle} onChange={e => setEditingDay({ ...editingDay, subtitle: e.target.value })} placeholder="Arrival Day" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Hotel</Label>
-                <Input value={editingDay.hotel} onChange={e => setEditingDay({ ...editingDay, hotel: e.target.value })} placeholder="Dorsett Kwun Tong" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Meals (comma-separated)</Label>
-                <Input
-                  value={editingDay.meals.join(', ')}
-                  onChange={e => setEditingDay({ ...editingDay, meals: e.target.value.split(',').map(m => m.trim()).filter(Boolean) })}
-                  placeholder="Breakfast, Lunch"
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDayDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveDay}>Save Day</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* Activity Dialog */}
-      <Dialog open={actDialogOpen} onOpenChange={setActDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editingAct && trip.itinerary.find(d => d.id === editingAct?.dayId)?.activities.find(a => a.id === editingAct?.activity.id) ? 'Edit Activity' : 'Add Activity'}</DialogTitle>
-          </DialogHeader>
-          {editingAct && (
-            <div className="grid gap-3">
-              {/* Quick templates — only when adding new (no title yet). */}
-              {editingAct.activity.title === '' && (
-                <div>
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Quick add</Label>
-                  <div className="flex gap-1.5 flex-wrap mt-1.5">
-                    {ACTIVITY_TEMPLATES.map(t => (
-                      <button
-                        key={t.label}
-                        onClick={() => setEditingAct(prev => prev ? ({
-                          ...prev,
-                          activity: { ...prev.activity, type: t.type, title: t.title },
-                        }) : prev)}
-                        className="px-2.5 py-1.5 rounded-xl border border-border bg-background hover:bg-accent active:scale-95 transition-all text-xs font-medium flex items-center gap-1"
-                      >
-                        <span aria-hidden>{t.emoji}</span> {t.label}
-                      </button>
-                    ))}
+              {/* Sheet header */}
+              <div className="flex items-center justify-between px-5 py-3">
+                <h2 className="text-base font-bold">
+                  {editingDay && trip.itinerary.find(d => d.id === editingDay.id) ? 'Edit Day' : 'Add Day'}
+                </h2>
+                <button
+                  onClick={() => setDayDialogOpen(false)}
+                  className="w-8 h-8 rounded-full bg-muted flex items-center justify-center"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Form */}
+              {editingDay && (
+                <div className="px-5 pb-8 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground uppercase tracking-wide">Day Number</Label>
+                      <input
+                        type="number"
+                        value={editingDay.dayNumber}
+                        onChange={e => setEditingDay({ ...editingDay, dayNumber: parseInt(e.target.value) || 1 })}
+                        min={1}
+                        className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground uppercase tracking-wide">Date</Label>
+                      <input
+                        type="date"
+                        value={editingDay.date}
+                        onChange={e => setEditingDay({ ...editingDay, date: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Title</Label>
+                    <input
+                      type="text"
+                      value={editingDay.title}
+                      onChange={e => setEditingDay({ ...editingDay, title: e.target.value })}
+                      placeholder="Manila → Hong Kong"
+                      className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Subtitle</Label>
+                    <input
+                      type="text"
+                      value={editingDay.subtitle}
+                      onChange={e => setEditingDay({ ...editingDay, subtitle: e.target.value })}
+                      placeholder="Arrival Day"
+                      className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Hotel</Label>
+                    <input
+                      type="text"
+                      value={editingDay.hotel}
+                      onChange={e => setEditingDay({ ...editingDay, hotel: e.target.value })}
+                      placeholder="Dorsett Kwun Tong"
+                      className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Meals (comma-separated)</Label>
+                    <input
+                      type="text"
+                      value={editingDay.meals.join(', ')}
+                      onChange={e => setEditingDay({ ...editingDay, meals: e.target.value.split(',').map(m => m.trim()).filter(Boolean) })}
+                      placeholder="Breakfast, Lunch"
+                      className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </div>
+                  <button
+                    onClick={saveDay}
+                    className="w-full py-4 rounded-2xl gradient-brand text-white font-bold text-sm mt-2 active:scale-[0.98] transition-transform"
+                  >
+                    Save Day
+                  </button>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Time</Label>
-                  <Input type="time" value={editingAct.activity.time} onChange={e => setEditingAct({ ...editingAct, activity: { ...editingAct.activity, time: e.target.value } })} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Type</Label>
-                  <Select
-                    value={editingAct.activity.type}
-                    onValueChange={(v: ItineraryActivity['type']) => setEditingAct({ ...editingAct, activity: { ...editingAct.activity, type: v } })}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Activity Bottom Sheet ── */}
+      <AnimatePresence>
+        {actDialogOpen && (
+          <>
+            <motion.div
+              key="act-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+              onClick={() => setActDialogOpen(false)}
+            />
+            <motion.div
+              key="act-sheet"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 z-[51] bg-background rounded-t-3xl shadow-2xl max-h-[92vh] overflow-y-auto"
+            >
+              {/* Handle */}
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 rounded-full bg-border" />
+              </div>
+
+              {/* Sheet header */}
+              <div className="flex items-center justify-between px-5 py-3">
+                <h2 className="text-base font-bold">
+                  {editingAct && trip.itinerary.find(d => d.id === editingAct?.dayId)?.activities.find(a => a.id === editingAct?.activity.id) ? 'Edit Activity' : 'Add Activity'}
+                </h2>
+                <button
+                  onClick={() => setActDialogOpen(false)}
+                  className="w-8 h-8 rounded-full bg-muted flex items-center justify-center"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Form */}
+              {editingAct && (
+                <div className="px-5 pb-8 space-y-3">
+                  {/* Quick templates — only when adding new (no title yet). */}
+                  {editingAct.activity.title === '' && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground uppercase tracking-wide">Quick add</Label>
+                      <div className="flex gap-1.5 flex-wrap mt-2">
+                        {ACTIVITY_TEMPLATES.map(t => (
+                          <button
+                            key={t.label}
+                            onClick={() => setEditingAct(prev => prev ? ({
+                              ...prev,
+                              activity: { ...prev.activity, type: t.type, title: t.title },
+                            }) : prev)}
+                            className="px-2.5 py-1.5 rounded-xl border border-border bg-background hover:bg-accent active:scale-95 transition-all text-xs font-medium flex items-center gap-1"
+                          >
+                            <span aria-hidden>{t.emoji}</span> {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground uppercase tracking-wide">Time</Label>
+                      <input
+                        type="time"
+                        value={editingAct.activity.time}
+                        onChange={e => setEditingAct({ ...editingAct, activity: { ...editingAct.activity, time: e.target.value } })}
+                        className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground uppercase tracking-wide">Type</Label>
+                      <Select
+                        value={editingAct.activity.type}
+                        onValueChange={(v: ItineraryActivity['type']) => setEditingAct({ ...editingAct, activity: { ...editingAct.activity, type: v } })}
+                      >
+                        <SelectTrigger className="rounded-xl bg-muted border-border h-[46px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(activityTypeConfig).map(([k, v]) => (
+                            <SelectItem key={k} value={k}>{v.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Title</Label>
+                    <input
+                      type="text"
+                      value={editingAct.activity.title}
+                      onChange={e => setEditingAct({ ...editingAct, activity: { ...editingAct.activity, title: e.target.value } })}
+                      placeholder="Activity name"
+                      className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Description</Label>
+                    <textarea
+                      value={editingAct.activity.description}
+                      onChange={e => setEditingAct({ ...editingAct, activity: { ...editingAct.activity, description: e.target.value } })}
+                      placeholder="Details..."
+                      rows={3}
+                      className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Location</Label>
+                    <input
+                      type="text"
+                      value={editingAct.activity.location || ''}
+                      onChange={e => setEditingAct({ ...editingAct, activity: { ...editingAct.activity, location: e.target.value } })}
+                      placeholder="Wong Tai Sin, Hong Kong"
+                      className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </div>
+
+                  <button
+                    onClick={saveActivity}
+                    className="w-full py-4 rounded-2xl gradient-brand text-white font-bold text-sm mt-2 active:scale-[0.98] transition-transform"
                   >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(activityTypeConfig).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    Save Activity
+                  </button>
                 </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Title</Label>
-                <Input value={editingAct.activity.title} onChange={e => setEditingAct({ ...editingAct, activity: { ...editingAct.activity, title: e.target.value } })} placeholder="Activity name" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Description</Label>
-                <Textarea value={editingAct.activity.description} onChange={e => setEditingAct({ ...editingAct, activity: { ...editingAct.activity, description: e.target.value } })} placeholder="Details..." rows={3} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Location</Label>
-                <Input value={editingAct.activity.location || ''} onChange={e => setEditingAct({ ...editingAct, activity: { ...editingAct.activity, location: e.target.value } })} placeholder="Wong Tai Sin, Hong Kong" />
-              </div>
-            </div>
-          )}
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setActDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveActivity}>Save Activity</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

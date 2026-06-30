@@ -669,8 +669,12 @@ export default function Photos() {
               transition={{ type: 'spring', damping: 28 }}
               className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-3xl shadow-2xl pb-safe"
             >
-              <div className="flex items-center justify-between px-5 pt-5 pb-3">
-                <h2 className="text-lg font-bold">Add to Photos</h2>
+              {/* Handle */}
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 rounded-full bg-border" />
+              </div>
+              <div className="flex items-center justify-between px-5 pt-3 pb-3">
+                <h2 className="text-base font-bold">Add to Photos</h2>
                 <button
                   onClick={() => setShowActionSheet(false)}
                   className="w-8 h-8 rounded-full bg-muted flex items-center justify-center"
@@ -679,27 +683,54 @@ export default function Photos() {
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <div className="px-5 pb-8 flex flex-col gap-3">
-                <button
-                  onClick={triggerCamera}
-                  className="w-full py-4 rounded-2xl gradient-brand text-white font-semibold text-base flex items-center justify-center gap-3 shadow-lg"
-                >
-                  <Camera className="h-5 w-5" />
-                  📷 Take Photo
-                </button>
-                <button
-                  onClick={triggerGallery}
-                  className="w-full py-4 rounded-2xl bg-muted border border-border text-foreground font-semibold text-base flex items-center justify-center gap-3"
-                >
-                  <Image className="h-5 w-5" />
-                  🖼 Choose from Gallery
-                </button>
+              <div className="px-5 pb-8 space-y-3">
+                {/* Primary options: 2-column icon tiles */}
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={triggerCamera}
+                    className="flex flex-col items-center justify-center gap-2.5 py-6 rounded-2xl gradient-brand text-white shadow-md active:scale-[0.97] transition-transform"
+                  >
+                    <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center">
+                      <Camera className="h-6 w-6" />
+                    </div>
+                    <div className="text-center">
+                      <p className="font-bold text-sm leading-tight">Camera</p>
+                      <p className="text-white/70 text-xs mt-0.5 leading-tight">Take a new photo</p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={triggerGallery}
+                    className="flex flex-col items-center justify-center gap-2.5 py-6 rounded-2xl bg-muted border border-border text-foreground active:scale-[0.97] transition-transform hover:bg-accent"
+                  >
+                    <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+                      <Image className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="text-center">
+                      <p className="font-bold text-sm leading-tight">Gallery</p>
+                      <p className="text-muted-foreground text-xs mt-0.5 leading-tight">Choose from library</p>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Divider */}
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">or</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+
+                {/* Note option: full-width list row */}
                 <button
                   onClick={triggerNote}
-                  className="w-full py-4 rounded-2xl bg-muted border border-border text-foreground font-semibold text-base flex items-center justify-center gap-3"
+                  className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl bg-muted border border-border text-foreground active:scale-[0.98] transition-transform hover:bg-accent"
                 >
-                  <FileText className="h-5 w-5" />
-                  ✏️ Add Note / Memory
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
+                    <FileText className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-semibold text-sm leading-tight">Add Note / Memory</p>
+                    <p className="text-muted-foreground text-xs mt-0.5">Write a caption or memory without a photo</p>
+                  </div>
                 </button>
               </div>
             </motion.div>
