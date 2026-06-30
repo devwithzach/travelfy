@@ -184,24 +184,37 @@ export default function Passport() {
               </div>
             </div>
 
-            {/* Passport number */}
-            <div className="relative z-10 mb-4">
-              <p className="text-white/40 text-[9px] uppercase tracking-widest mb-1">Document No.</p>
-              <p className="text-white font-mono text-2xl font-bold tracking-[0.15em]">
-                {passport.passportNumber || '·· ·······'}
-              </p>
-            </div>
-
-            {/* Name */}
-            <div className="relative z-10">
-              <p className="text-white/40 text-[9px] uppercase tracking-widest">Surname / Given Names</p>
-              <p className="text-white font-bold text-base mt-0.5 truncate">
-                {passport.fullName || 'TRAVELER NAME'}
-              </p>
-              {passport.nationality && (
-                <p className="text-white/60 text-xs mt-0.5">{passport.nationality}</p>
-              )}
-            </div>
+            {passport.passportNumber || passport.fullName ? (
+              <>
+                {/* Passport number */}
+                <div className="relative z-10 mb-4">
+                  <p className="text-white/40 text-[9px] uppercase tracking-widest mb-1">Document No.</p>
+                  <p className="text-white font-mono text-2xl font-bold tracking-[0.15em]">
+                    {passport.passportNumber || '—'}
+                  </p>
+                </div>
+                {/* Name */}
+                <div className="relative z-10">
+                  <p className="text-white/40 text-[9px] uppercase tracking-widest">Surname / Given Names</p>
+                  <p className="text-white font-bold text-base mt-0.5 truncate">
+                    {passport.fullName || '—'}
+                  </p>
+                  {passport.nationality && (
+                    <p className="text-white/60 text-xs mt-0.5">{passport.nationality}</p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="relative z-10 flex-1 flex flex-col items-center justify-center py-6 gap-3">
+                <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center">
+                  <Globe className="h-7 w-7 text-white/40" />
+                </div>
+                <div className="text-center">
+                  <p className="text-white/60 text-sm font-semibold">No passport added yet</p>
+                  <p className="text-white/30 text-xs mt-0.5">Tap "Edit Passport Details" below</p>
+                </div>
+              </div>
+            )}
 
             {/* Expiry chip */}
             {passport.expiryDate && (
@@ -214,19 +227,17 @@ export default function Passport() {
             )}
           </div>
 
-          {/* MRZ strip */}
-          <div className="bg-slate-900 dark:bg-black px-4 py-2.5">
-            <p className="font-mono text-[9px] text-green-400/70 tracking-[0.08em] leading-relaxed break-all">
-              {passport.passportNumber
-                ? `P<${(passport.issuingCountry || 'PHL').slice(0,3).toUpperCase()}${(passport.fullName || 'TRAVELER').replace(/\s/g,'<').toUpperCase()}<<<<<<<<<<<<<<<<<`
-                : 'P<PHL<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'}
-            </p>
-            <p className="font-mono text-[9px] text-green-400/70 tracking-[0.08em] mt-0.5 break-all">
-              {passport.passportNumber
-                ? `${passport.passportNumber.padEnd(9,'<')}${(passport.nationality || 'FIL').slice(0,3).toUpperCase()}${(passport.dateOfBirth || '000000').replace(/-/g,'').slice(2)}0${(passport.expiryDate || '000000').replace(/-/g,'').slice(2)}0<<<<<<<<<<<<<<`
-                : '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'}
-            </p>
-          </div>
+          {/* MRZ strip — only when passport number is filled */}
+          {passport.passportNumber && (
+            <div className="bg-slate-900 dark:bg-black px-4 py-2.5">
+              <p className="font-mono text-[9px] text-green-400/70 tracking-[0.08em] leading-relaxed break-all">
+                {`P<${(passport.issuingCountry || 'PHL').slice(0,3).toUpperCase()}${(passport.fullName || 'TRAVELER').replace(/\s/g,'<').toUpperCase()}<<<<<<<<<<<<<<<<<`}
+              </p>
+              <p className="font-mono text-[9px] text-green-400/70 tracking-[0.08em] mt-0.5 break-all">
+                {`${passport.passportNumber.padEnd(9,'<')}${(passport.nationality || 'FIL').slice(0,3).toUpperCase()}${(passport.dateOfBirth || '000000').replace(/-/g,'').slice(2)}0${(passport.expiryDate || '000000').replace(/-/g,'').slice(2)}0<<<<<<<<<<<<<<`}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Passport details view */}
