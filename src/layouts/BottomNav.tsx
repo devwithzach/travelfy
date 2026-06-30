@@ -4,10 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Plane, Building2, FileText, ListChecks,
   DollarSign, AlertCircle, StickyNote, Map, Link2, Settings,
-  MapPin, Camera, Globe, Layers, MoreHorizontal, X, TrendingUp, BarChart3
+  MapPin, Camera, Globe, Layers, MoreHorizontal, X, TrendingUp, BarChart3, LogOut
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useTrip } from '@/contexts/TripContext'
+import { useAuth } from '@/contexts/AuthContext'
 
 const mainNav = [
   { to: '/', icon: LayoutDashboard, label: 'Home' },
@@ -36,6 +37,7 @@ export default function BottomNav() {
   const [moreOpen, setMoreOpen] = useState(false)
   const navigate = useNavigate()
   const { activeTripId } = useTrip()
+  const { signOut, user } = useAuth()
   const inLobby = !activeTripId
   // In lobby mode the user hasn't picked a trip — only the Home and Trips
   // tabs are valid. Trip-scoped destinations are hidden so they can't be
@@ -77,15 +79,29 @@ export default function BottomNav() {
               <div className="w-10 h-1 rounded-full bg-border" />
             </div>
 
-            {/* Close button */}
+            {/* Header */}
             <div className="flex items-center justify-between px-5 pb-3">
-              <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">More</p>
-              <button
-                onClick={() => setMoreOpen(false)}
-                className="w-7 h-7 rounded-full bg-muted flex items-center justify-center"
-              >
-                <X className="h-4 w-4 text-muted-foreground" />
-              </button>
+              <div>
+                <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">More</p>
+                {user?.email && (
+                  <p className="text-[11px] text-muted-foreground/50 mt-0.5 truncate max-w-[200px]">{user.email}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={async () => { setMoreOpen(false); await signOut() }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-destructive/10 text-destructive text-xs font-semibold hover:bg-destructive/20 active:scale-95 transition-all"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Sign out
+                </button>
+                <button
+                  onClick={() => setMoreOpen(false)}
+                  className="w-7 h-7 rounded-full bg-muted flex items-center justify-center"
+                >
+                  <X className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </div>
             </div>
 
             {/* Grid */}
