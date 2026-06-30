@@ -123,6 +123,9 @@ export interface PassportInfo {
   issueDate: string
   expiryDate: string
   issuingCountry: string
+  gender?: string
+  placeOfBirth?: string
+  mrz?: string
 }
 
 export interface VisaInfo {
