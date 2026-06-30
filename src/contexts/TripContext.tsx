@@ -45,33 +45,37 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
   const clearError = useCallback(() => setError(null), [])
 
+  // Stable user ID — avoids re-running effects when Supabase refreshes the
+  // auth token and hands back a new User object with the same ID.
+  const userId = user?.id ?? null
+
   // Load trips list on auth
   useEffect(() => {
-    if (!user) { setLoading(false); return }
+    if (!userId) { setLoading(false); return }
     setLoading(true)
     setError(null)
-    storageService.listTrips(user.id)
+    storageService.listTrips(userId)
       .then(list => { setTrips(list) })
       .catch(err => {
         console.error('Failed to load trips:', err)
         setError(`Failed to load trips: ${err?.message ?? 'unknown error'}`)
       })
       .finally(() => setLoading(false))
-  }, [user])
+  }, [userId])
 
   // Load full trip when activeTripId changes
   useEffect(() => {
-    if (!user || !activeTripId) { setTrip(createEmptyTrip()); return }
+    if (!userId || !activeTripId) { setTrip(createEmptyTrip()); return }
     setTripLoading(true)
     setError(null)
-    storageService.getTripById(user.id, activeTripId)
+    storageService.getTripById(userId, activeTripId)
       .then(data => { setTrip(data) })
       .catch(err => {
         console.error('Failed to load trip:', err)
         setError(`Failed to load trip: ${err?.message ?? 'unknown error'}`)
       })
       .finally(() => setTripLoading(false))
-  }, [user, activeTripId])
+  }, [userId, activeTripId])
 
   const selectTrip = useCallback((id: string) => {
     localStorage.setItem('activeTripId', id)
@@ -88,18 +92,18 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   // listener so returning to the app (e.g., after editing on Timeline in a
   // different tab, or after the device went to sleep) shows current data.
   const refreshTrip = useCallback(async () => {
-    if (!user) return
+    if (!userId) return
     try {
-      const list = await storageService.listTrips(user.id)
+      const list = await storageService.listTrips(userId)
       setTrips(list)
       if (activeTripId) {
-        const data = await storageService.getTripById(user.id, activeTripId)
+        const data = await storageService.getTripById(userId, activeTripId)
         setTrip(data)
       }
     } catch (err) {
       console.warn('Failed to refresh trip:', err)
     }
-  }, [user, activeTripId])
+  }, [userId, activeTripId])
 
   // Auto-refresh when the page becomes visible again (tab focus, app foregrounded).
   useEffect(() => {
@@ -111,8 +115,8 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   }, [refreshTrip])
 
   const createNewTrip = useCallback(async (info: { name: string; destination: string; startDate: string; endDate: string; description: string }) => {
-    if (!user) throw new Error('Not authenticated')
-    const id = await storageService.createTrip(user.id, info)
+    if (!userId) throw new Error('Not authenticated')
+    const id = await storageService.createTrip(userId, info)
     const newSummary: TripSummary = {
       id,
       name: info.name,
@@ -124,24 +128,24 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     }
     setTrips(prev => [newSummary, ...prev])
     return id
-  }, [user])
+  }, [userId])
 
   const deleteTripById = useCallback(async (id: string) => {
-    if (!user) return
-    await storageService.deleteTripById(id, user.id)
+    if (!userId) return
+    await storageService.deleteTripById(id, userId)
     setTrips(prev => prev.filter(t => t.id !== id))
     if (activeTripId === id) {
       localStorage.removeItem('activeTripId')
       setActiveTripId(null)
       setTrip(createEmptyTrip())
     }
-  }, [user, activeTripId])
+  }, [userId, activeTripId])
 
   const debouncedSave = useCallback((data: TripData) => {
-    if (!user) return
+    if (!userId) return
     if (saveTimeout.current) clearTimeout(saveTimeout.current)
     saveTimeout.current = setTimeout(() => {
-      storageService.saveTrip(user.id, data).catch(err => {
+      storageService.saveTrip(userId, data).catch(err => {
         console.error('Failed to save trip:', err)
         setError(`Failed to save trip: ${err?.message ?? 'unknown error'}`)
       })
@@ -157,13 +161,13 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   }, [debouncedSave])
 
   const resetTrip = useCallback(async () => {
-    if (!user || !activeTripId) return
-    await storageService.deleteTripById(activeTripId, user.id)
+    if (!userId || !activeTripId) return
+    await storageService.deleteTripById(activeTripId, userId)
     setTrips(prev => prev.filter(t => t.id !== activeTripId))
     localStorage.removeItem('activeTripId')
     setActiveTripId(null)
     setTrip(createEmptyTrip())
-  }, [user, activeTripId])
+  }, [userId, activeTripId])
 
   const exportTrip = useCallback(() => storageService.exportTrip(trip), [trip])
 
@@ -171,7 +175,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   // are regenerated so we don't collide with any existing rows. After save the
   // new trip becomes the active trip.
   const seedSampleTrip = useCallback(async (): Promise<string> => {
-    if (!user) throw new Error('Not authenticated')
+    if (!userId) throw new Error('Not authenticated')
     const newId = crypto.randomUUID()
     const fresh: TripData = JSON.parse(JSON.stringify(sampleTrip))
     fresh.tripInfo.id = newId
@@ -190,11 +194,11 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     fresh.notes = fresh.notes.map(n => ({ ...n, id: crypto.randomUUID() }))
     fresh.visas = fresh.visas.map(v => ({ ...v, id: crypto.randomUUID() }))
 
-    await storageService.saveTrip(user.id, fresh)
-    const list = await storageService.listTrips(user.id)
+    await storageService.saveTrip(userId, fresh)
+    const list = await storageService.listTrips(userId)
     setTrips(list)
     return newId
-  }, [user])
+  }, [userId])
 
   // Clone an existing trip's reusable structure into a fresh trip:
   //   keeps: itinerary skeleton (days + activities, dates cleared, done false),
@@ -203,8 +207,8 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
   //          documents, notes, visas, currency rates
   // Useful for "plan my next trip using last trip as a template".
   const duplicateTrip = useCallback(async (sourceId: string, overrides?: { name?: string }): Promise<string> => {
-    if (!user) throw new Error('Not authenticated')
-    const source = await storageService.getTripById(user.id, sourceId)
+    if (!userId) throw new Error('Not authenticated')
+    const source = await storageService.getTripById(userId, sourceId)
     const newId = crypto.randomUUID()
     const cloned: TripData = {
       tripInfo: {
@@ -245,21 +249,21 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       currencyRates: [...source.currencyRates],
       lastUpdated: new Date().toISOString(),
     }
-    await storageService.saveTrip(user.id, cloned)
-    const list = await storageService.listTrips(user.id)
+    await storageService.saveTrip(userId, cloned)
+    const list = await storageService.listTrips(userId)
     setTrips(list)
     return newId
-  }, [user])
+  }, [userId])
 
   const importTrip = useCallback(async (json: string) => {
-    if (!user) return false
-    const ok = await storageService.importTrip(user.id, json)
+    if (!userId) return false
+    const ok = await storageService.importTrip(userId, json)
     if (ok && activeTripId) {
-      const data = await storageService.getTripById(user.id, activeTripId)
+      const data = await storageService.getTripById(userId, activeTripId)
       setTrip(data)
     }
     return ok
-  }, [user, activeTripId])
+  }, [userId, activeTripId])
 
   return (
     <TripContext.Provider value={{
