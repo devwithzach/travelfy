@@ -106,7 +106,7 @@ const defaultDay = (): ItineraryDay => ({
 export default function Timeline() {
   const { trip, updateTrip } = useTrip()
   const tripId = trip.tripInfo.id
-  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set(trip.itinerary.map(d => d.id)))
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
   const [dayDialogOpen, setDayDialogOpen] = useState(false)
   const [actDialogOpen, setActDialogOpen] = useState(false)
   const [editingDay, setEditingDay] = useState<ItineraryDay | null>(null)
