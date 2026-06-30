@@ -159,13 +159,24 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
       const { data: { text } } = await worker.recognize(processedBlob)
       await worker.terminate()
 
-      // Extract candidate MRZ lines — must be ≥30 chars, only MRZ charset
+      console.log('[MRZ raw OCR]', text)
+
+      // eng reads OCR-B '<' as space — convert spaces to '<' before stripping.
+      // MRZ lines: ≥40 chars, ≥5 '<' fillers, starts with 'P<' (line1) or has 6+ consecutive digits (line2).
       const candidates = text
         .split('\n')
-        .map((l: string) => l.toUpperCase().replace(/[^A-Z0-9<]/g, '').trim())
-        // MRZ lines: 40+ chars and at least 5 '<' filler chars
-        // (regular printed passport text has no '<' at all)
-        .filter((l: string) => l.length >= 40 && (l.match(/</g) ?? []).length >= 5)
+        .map((l: string) =>
+          l.toUpperCase()
+            .replace(/ /g, '<')
+            .replace(/[^A-Z0-9<]/g, '')
+            .trim()
+        )
+        .filter((l: string) => {
+          if (l.length < 40) return false
+          const angles = (l.match(/</g) ?? []).length
+          if (angles < 5) return false
+          return l.startsWith('P<') || /\d{6}/.test(l)
+        })
         .sort((a: string, b: string) => {
           const aScore = (a.startsWith('P<') ? 20 : 0) + (a.match(/</g) ?? []).length
           const bScore = (b.startsWith('P<') ? 20 : 0) + (b.match(/</g) ?? []).length
