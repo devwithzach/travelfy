@@ -78,29 +78,27 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
   const handleClose = () => { reset(); onClose() }
   const handleApply = () => { if (result) { onApply(result); reset(); onClose() } }
 
-  // Crop the bottom 28% of the image and convert to high-contrast grayscale.
-  // The MRZ strip always sits in the lower quarter of the passport photo page.
+  // Crop the bottom 15% of the image (MRZ strip zone), scale 3×,
+  // convert to high-contrast grayscale so Tesseract reads OCR-B correctly.
   const preprocessImage = (file: File): Promise<Blob> =>
     new Promise((resolve, reject) => {
       const img = new Image()
       img.onload = () => {
-        const cropTop = Math.floor(img.height * 0.72) // keep bottom 28%
+        const cropTop = Math.floor(img.height * 0.85) // bottom 15% = MRZ only
         const cropH = img.height - cropTop
-        // Scale up 2× so Tesseract has more pixels to work with
-        const scale = 2
+        const scale = 3 // more pixels → better OCR
         const canvas = document.createElement('canvas')
         canvas.width = img.width * scale
         canvas.height = cropH * scale
         const ctx = canvas.getContext('2d')!
         ctx.drawImage(img, 0, cropTop, img.width, cropH, 0, 0, canvas.width, canvas.height)
 
-        // Convert to grayscale + boost contrast
+        // Grayscale + aggressive contrast
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
         const d = imageData.data
         for (let i = 0; i < d.length; i += 4) {
           const gray = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2])
-          // Contrast stretch: push values toward black or white
-          const contrast = Math.min(255, Math.max(0, ((gray - 128) * 1.8) + 128))
+          const contrast = Math.min(255, Math.max(0, ((gray - 128) * 2.5) + 128))
           d[i] = d[i + 1] = d[i + 2] = contrast
         }
         ctx.putImageData(imageData, 0, 0)
@@ -109,6 +107,30 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
       img.onerror = reject
       img.src = URL.createObjectURL(file)
     })
+
+  // MRZ TD3 check digit algorithm
+  const checkDigit = (s: string): number => {
+    const W = [7, 3, 1]
+    const v = (c: string) => {
+      if (c === '<') return 0
+      if (c >= '0' && c <= '9') return parseInt(c)
+      return c.charCodeAt(0) - 55
+    }
+    return s.split('').reduce((sum, c, i) => sum + v(c) * W[i % 3], 0) % 10
+  }
+
+  // Fix common OCR-B digit misreads using MRZ field structure.
+  // Positions in line 2 that MUST be digits: 9,13-19,21-27,42,43.
+  const fixMrzLine2 = (line: string): string => {
+    const digitOnly: Record<string, string> = {
+      O: '0', Q: '0', D: '0', G: '6', S: '5', Z: '2',
+      I: '1', L: '1', T: '1', B: '8', A: '4', E: '6',
+    }
+    const forceDigit = new Set([9, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27, 42, 43])
+    return line.split('').map((c, i) =>
+      forceDigit.has(i) && digitOnly[c] ? digitOnly[c] : c
+    ).join('')
+  }
 
   const scan = async (file: File) => {
     const url = URL.createObjectURL(file)
@@ -133,7 +155,7 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
 
       await worker.setParameters({
         tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
-        tessedit_pageseg_mode: '6' as any,
+        tessedit_pageseg_mode: '11' as any, // sparse text — best for MRZ lines
       })
 
       const { data: { text } } = await worker.recognize(processedBlob)
@@ -157,9 +179,14 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
         return
       }
 
-      // Try every consecutive pair for a valid parse
+      // Apply digit-position correction and try every consecutive pair
       let mrzLines: string[] = []
-      const all = candidates.map((l: string) => l.padEnd(44, '<').slice(0, 44))
+      const all = candidates.map((l: string, idx: number) => {
+        const padded = l.padEnd(44, '<').slice(0, 44)
+        // Line 2 starts with the doc number (alphanumeric), not 'P<'
+        return !padded.startsWith('P<') ? fixMrzLine2(padded) : padded
+      })
+
       for (let i = 0; i < all.length - 1; i++) {
         try {
           parse([all[i], all[i + 1]])
@@ -290,9 +317,9 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
                   {/* Tips */}
                   <div className="space-y-2">
                     {[
-                      'Photo the full passport photo page (we auto-crop the MRZ)',
-                      'Good lighting — avoid flash glare on the page',
-                      'Keep the passport flat and steady',
+                      'Zoom in close on the bottom two lines of text (the MRZ strip)',
+                      'Bright, even light — no flash glare on the page',
+                      'Keep steady and in focus — blurry kills accuracy',
                     ].map((tip, i) => (
                       <div key={i} className="flex items-center gap-2.5 text-xs text-muted-foreground">
                         <div className="w-4 h-4 rounded-full bg-indigo-500/10 flex items-center justify-center shrink-0">
