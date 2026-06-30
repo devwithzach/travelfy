@@ -3,13 +3,14 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Globe, Edit2, AlertTriangle, Shield, Plus, Trash2, X,
   Check, Loader2, CalendarDays, Hash, MapPin, User, Flag,
-  Clock, Building2, BookOpen
+  Clock, Building2, BookOpen, ScanLine
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { storageService } from '@/services/storage'
 import type { VisaInfo, PassportInfo } from '@/types'
 import { isExpiringSoon, isExpired, formatDate } from '@/utils/dateUtils'
+import PassportScanner from '@/components/common/PassportScanner'
 
 const emptyVisa = (): VisaInfo => ({
   id: crypto.randomUUID(),
@@ -227,9 +228,15 @@ export default function Passport() {
   const visas = trip.visas
 
   const [editSheet, setEditSheet] = useState(false)
+  const [scanSheet, setScanSheet] = useState(false)
   const [buf, setBuf] = useState<PassportInfo>(passport)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  const applyScannedData = (scanned: Partial<PassportInfo>) => {
+    setBuf(prev => ({ ...prev, ...scanned }))
+    setEditSheet(true)
+  }
 
   const [visaSheet, setVisaSheet] = useState(false)
   const [visaBuf, setVisaBuf] = useState<VisaInfo>(emptyVisa())
@@ -448,12 +455,18 @@ export default function Passport() {
               <p className="text-xs text-muted-foreground/60 mt-1">Tap edit to fill in your passport info</p>
             </div>
           )}
-          <div className="p-4 border-t border-border">
+          <div className="p-4 border-t border-border flex gap-2">
+            <button
+              onClick={() => setScanSheet(true)}
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-sm font-semibold hover:bg-indigo-500/15 transition-colors active:scale-[0.99]"
+            >
+              <ScanLine className="h-4 w-4" /> Scan
+            </button>
             <button
               onClick={openEdit}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-primary/10 text-primary text-sm font-semibold hover:bg-primary/15 transition-colors active:scale-[0.99]"
+              className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-primary/10 text-primary text-sm font-semibold hover:bg-primary/15 transition-colors active:scale-[0.99]"
             >
-              <Edit2 className="h-4 w-4" /> Edit Passport Details
+              <Edit2 className="h-4 w-4" /> Edit
             </button>
           </div>
         </div>
@@ -588,12 +601,20 @@ export default function Passport() {
                   <h2 className="text-base font-bold">Edit Passport</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">Your biometric travel document</p>
                 </div>
-                <button
-                  onClick={() => !saving && setEditSheet(false)}
-                  className="w-8 h-8 rounded-full bg-muted flex items-center justify-center"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setEditSheet(false); setScanSheet(true) }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs font-semibold active:scale-95 transition-all"
+                  >
+                    <ScanLine className="h-3.5 w-3.5" /> Scan
+                  </button>
+                  <button
+                    onClick={() => !saving && setEditSheet(false)}
+                    className="w-8 h-8 rounded-full bg-muted flex items-center justify-center"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
               <div className="px-5 pt-5 pb-10 space-y-4">
@@ -687,6 +708,13 @@ export default function Passport() {
           </>
         )}
       </AnimatePresence>
+
+      {/* ── Passport Scanner Sheet ── */}
+      <PassportScanner
+        open={scanSheet}
+        onClose={() => setScanSheet(false)}
+        onApply={applyScannedData}
+      />
 
       {/* ── Visa Add/Edit Bottom Sheet ── */}
       <AnimatePresence>
