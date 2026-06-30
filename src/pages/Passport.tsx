@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Globe, Edit2, AlertTriangle, Shield, Plus, Trash2, X,
   Check, Loader2, CalendarDays, Hash, MapPin, User, Flag,
-  ChevronRight, Clock
+  Clock
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { storageService } from '@/services/storage'
 import type { VisaInfo, PassportInfo } from '@/types'
 import { isExpiringSoon, isExpired, formatDate } from '@/utils/dateUtils'
 
@@ -56,8 +58,25 @@ function LabeledInput({
 }
 
 export default function Passport() {
-  const { trip, updateTrip } = useTrip()
-  const { passport, visas } = trip
+  const { trip, updateTrip, activeTripId } = useTrip()
+  const { user } = useAuth()
+  const hasTrip = !!activeTripId
+
+  // When no trip is active, load passport directly from Supabase
+  const [globalPassport, setGlobalPassport] = useState<PassportInfo | null>(null)
+  const [globalLoading, setGlobalLoading] = useState(!hasTrip)
+
+  useEffect(() => {
+    if (hasTrip || !user) return
+    setGlobalLoading(true)
+    storageService.getPassport(user.id)
+      .then(p => setGlobalPassport(p))
+      .finally(() => setGlobalLoading(false))
+  }, [hasTrip, user])
+
+  // Use trip passport when inside a trip, global passport otherwise
+  const passport = hasTrip ? trip.passport : (globalPassport ?? trip.passport)
+  const visas = trip.visas
 
   const [editSheet, setEditSheet] = useState(false)
   const [buf, setBuf] = useState<PassportInfo>(passport)
@@ -73,16 +92,26 @@ export default function Passport() {
 
   const daysUntilExpiry = () => {
     if (!passport.expiryDate) return null
-    const diff = Math.ceil((new Date(passport.expiryDate).getTime() - Date.now()) / 86400000)
-    return diff
+    return Math.ceil((new Date(passport.expiryDate).getTime() - Date.now()) / 86400000)
   }
 
   const openEdit = () => { setBuf({ ...passport }); setSaved(false); setEditSheet(true) }
 
-  const savePassport = () => {
+  const savePassport = async () => {
+    if (!user) return
     setSaving(true)
-    updateTrip(prev => ({ ...prev, passport: buf }))
-    setTimeout(() => { setSaving(false); setSaved(true); setTimeout(() => { setSaved(false); setEditSheet(false) }, 700) }, 400)
+    try {
+      await storageService.savePassport(user.id, buf)
+      if (hasTrip) {
+        updateTrip(prev => ({ ...prev, passport: buf }))
+      } else {
+        setGlobalPassport(buf)
+      }
+      setSaved(true)
+      setTimeout(() => { setSaved(false); setEditSheet(false) }, 700)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const openAddVisa = () => { setVisaBuf(emptyVisa()); setVisaSheet(true) }
@@ -109,6 +138,14 @@ export default function Passport() {
   }
 
   const days = daysUntilExpiry()
+
+  if (globalLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background pb-28">

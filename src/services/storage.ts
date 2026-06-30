@@ -198,6 +198,9 @@ async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripDa
             issueDate: p.issue_date,
             expiryDate: p.expiry_date,
             issuingCountry: p.issuing_country,
+            gender: p.gender || undefined,
+            placeOfBirth: p.place_of_birth || undefined,
+            mrz: p.mrz || undefined,
           }
         })()
       : createEmptyTrip().passport,
@@ -417,7 +420,7 @@ export const storageService = {
         }
       })(),
 
-      // Passport (upsert by user_id)
+      // Passport (upsert by user_id — global, not per trip)
       supabase.from('passport_info').upsert({
         user_id: userId,
         full_name: trip.passport.fullName,
@@ -427,6 +430,9 @@ export const storageService = {
         issue_date: trip.passport.issueDate,
         expiry_date: trip.passport.expiryDate,
         issuing_country: trip.passport.issuingCountry,
+        gender: trip.passport.gender ?? '',
+        place_of_birth: trip.passport.placeOfBirth ?? '',
+        mrz: trip.passport.mrz ?? '',
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' }),
 
@@ -456,6 +462,43 @@ export const storageService = {
         }
       })(),
     ])
+  },
+
+  // ── Standalone passport helpers (no active trip required) ──────────────
+
+  async getPassport(userId: string): Promise<import('@/types').PassportInfo> {
+    const { data } = await supabase.from('passport_info').select('*').eq('user_id', userId).maybeSingle()
+    if (!data) return createEmptyTrip().passport
+    const p = passportRowSchema.parse(data)
+    return {
+      fullName: p.full_name,
+      passportNumber: p.passport_number,
+      nationality: p.nationality,
+      dateOfBirth: p.date_of_birth,
+      issueDate: p.issue_date,
+      expiryDate: p.expiry_date,
+      issuingCountry: p.issuing_country,
+      gender: p.gender || undefined,
+      placeOfBirth: p.place_of_birth || undefined,
+      mrz: p.mrz || undefined,
+    }
+  },
+
+  async savePassport(userId: string, passport: import('@/types').PassportInfo): Promise<void> {
+    await supabase.from('passport_info').upsert({
+      user_id: userId,
+      full_name: passport.fullName,
+      passport_number: passport.passportNumber,
+      nationality: passport.nationality,
+      date_of_birth: passport.dateOfBirth,
+      issue_date: passport.issueDate,
+      expiry_date: passport.expiryDate,
+      issuing_country: passport.issuingCountry,
+      gender: passport.gender ?? '',
+      place_of_birth: passport.placeOfBirth ?? '',
+      mrz: passport.mrz ?? '',
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' })
   },
 
   async resetTrip(userId: string): Promise<void> {

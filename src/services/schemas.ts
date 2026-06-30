@@ -152,6 +152,9 @@ export const passportRowSchema = z.object({
   issue_date: str(),
   expiry_date: str(),
   issuing_country: str(),
+  gender: str(),
+  place_of_birth: str(),
+  mrz: str(),
 })
 
 export const tripRowSchema = z.object({

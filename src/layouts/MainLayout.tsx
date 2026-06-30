@@ -33,10 +33,11 @@ export default function MainLayout() {
     )
   }
 
-  // Lobby mode: when no trip is selected, only the Dashboard ("/") is
-  // accessible. Every trip-scoped page redirects to the trips picker so the
-  // user has to explicitly enter a trip before seeing its features.
-  if (!activeTripId && location.pathname !== '/') {
+  // Lobby mode: when no trip is selected, only Dashboard ("/") and global
+  // pages ("/passport") are accessible without a trip. Everything else
+  // redirects to the trips picker.
+  const GLOBAL_PATHS = ['/', '/passport']
+  if (!activeTripId && !GLOBAL_PATHS.includes(location.pathname)) {
     return <Navigate to="/trips" replace />
   }
 
