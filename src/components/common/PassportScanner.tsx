@@ -153,7 +153,8 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
       })
 
       await worker.setParameters({
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
+        // No character whitelist — letting eng read biographical text naturally
+        // gives accurate digits for the passport number. MRZ line 1 is cleaned afterwards.
         tessedit_pageseg_mode: '11' as any,
       })
 
@@ -176,6 +177,14 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
         .sort()
       const printedDob    = dateHits.find(d => +d.slice(0, 4) < 2010)
       const printedExpiry = dateHits.find(d => +d.slice(0, 4) >= 2020)
+
+      // Extract passport number from biographical text.
+      // Pattern: 1-2 uppercase letters + 6-8 digits + optional trailing letter/digit.
+      // Regular print fonts read accurately by eng — no whitelist interference.
+      const passportCandidates = [...upperText.matchAll(/\b([A-Z]{1,2}\d{6,8}[A-Z0-9]?)\b/g)]
+        .map(m => m[1])
+        .filter(m => m.length >= 8 && m.length <= 10)
+      const extractedPassport = passportCandidates[0] ?? null
 
       // ── 2. Find MRZ line 1 (name + nationality) ───────────────────────────
       // eng reads OCR-B '<' as space — convert spaces before stripping.
@@ -236,13 +245,16 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
       if (printedDob)    scanned.dateOfBirth = printedDob
       if (printedExpiry) scanned.expiryDate  = printedExpiry
 
+      // Use biographical passport number if MRZ parse didn't give us one
+      if (!scanned.passportNumber && extractedPassport) {
+        scanned.passportNumber = extractedPassport
+      }
+
       setResult(scanned)
-      const hasDates = !!(scanned.dateOfBirth || scanned.expiryDate)
+      const missing = !scanned.passportNumber || !scanned.gender
       setPartialNote(
-        isPartial
-          ? hasDates
-            ? 'Partial scan — name, nationality and dates were read. Enter passport number and sex manually.'
-            : 'Partial scan — name and nationality were read. Enter remaining fields manually.'
+        isPartial || missing
+          ? `Partial scan — verify all fields. ${!scanned.passportNumber ? 'Passport number may need correction. ' : ''}${!scanned.gender ? 'Enter sex manually.' : ''}`
           : null
       )
     } catch (err) {
