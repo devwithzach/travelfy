@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Globe, Edit2, AlertTriangle, Shield, Plus, Trash2, X,
@@ -21,6 +21,79 @@ const emptyVisa = (): VisaInfo => ({
   status: 'valid',
   notes: '',
 })
+
+const NATIONALITIES = [
+  'Afghan','Albanian','Algerian','American','Andorran','Angolan','Antiguan','Argentine',
+  'Armenian','Australian','Austrian','Azerbaijani','Bahamian','Bahraini','Bangladeshi',
+  'Barbadian','Belarusian','Belgian','Belizean','Beninese','Bhutanese','Bolivian',
+  'Bosnian','Botswanan','Brazilian','British','Bruneian','Bulgarian','Burkinabe',
+  'Burundian','Cambodian','Cameroonian','Canadian','Cape Verdean','Central African',
+  'Chadian','Chilean','Chinese','Colombian','Comorian','Congolese','Costa Rican',
+  'Croatian','Cuban','Cypriot','Czech','Danish','Djiboutian','Dominican','Dutch',
+  'East Timorese','Ecuadorian','Egyptian','Emirati','Equatorial Guinean','Eritrean',
+  'Estonian','Ethiopian','Fijian','Filipino','Finnish','French','Gabonese','Gambian',
+  'Georgian','German','Ghanaian','Greek','Grenadian','Guatemalan','Guinean',
+  'Guinea-Bissauan','Guyanese','Haitian','Honduran','Hungarian','Icelandic','Indian',
+  'Indonesian','Iranian','Iraqi','Irish','Israeli','Italian','Ivorian','Jamaican',
+  'Japanese','Jordanian','Kazakhstani','Kenyan','Kiribati','Korean','Kuwaiti','Kyrgyz',
+  'Laotian','Latvian','Lebanese','Lesothan','Liberian','Libyan','Liechtenstein',
+  'Lithuanian','Luxembourgish','Macedonian','Malagasy','Malawian','Malaysian',
+  'Maldivian','Malian','Maltese','Marshallese','Mauritanian','Mauritian','Mexican',
+  'Micronesian','Moldovan','Monegasque','Mongolian','Montenegrin','Moroccan',
+  'Mozambican','Namibian','Nauruan','Nepali','New Zealander','Nicaraguan','Nigerien',
+  'Nigerian','Norwegian','Omani','Pakistani','Palauan','Palestinian','Panamanian',
+  'Papua New Guinean','Paraguayan','Peruvian','Polish','Portuguese','Qatari',
+  'Romanian','Russian','Rwandan','Salvadoran','Samoan','Saudi','Senegalese','Serbian',
+  'Seychellois','Sierra Leonean','Singaporean','Slovakian','Slovenian','Solomon Islander',
+  'Somali','South African','South Sudanese','Spanish','Sri Lankan','Sudanese',
+  'Surinamese','Swazi','Swedish','Swiss','Syrian','Taiwanese','Tajik','Tanzanian',
+  'Thai','Togolese','Tongan','Trinidadian','Tunisian','Turkish','Turkmen','Tuvaluan',
+  'Ugandan','Ukrainian','Uruguayan','Uzbek','Vanuatuan','Venezuelan','Vietnamese',
+  'Yemeni','Zambian','Zimbabwean',
+]
+
+function NationalityPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [query, setQuery] = useState(value)
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  const filtered = query.length > 0
+    ? NATIONALITIES.filter(n => n.toLowerCase().startsWith(query.toLowerCase())).slice(0, 8)
+    : NATIONALITIES.slice(0, 8)
+
+  const pick = (n: string) => { onChange(n); setQuery(n); setOpen(false) }
+
+  return (
+    <div className="space-y-1.5 relative" ref={ref}>
+      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+        <Flag className="h-3 w-3" /> Nationality
+      </label>
+      <input
+        type="text"
+        value={query}
+        onChange={e => { setQuery(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        placeholder="Filipino"
+        className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute top-full left-0 right-0 z-[60] mt-1 bg-background border border-border rounded-xl shadow-xl overflow-hidden">
+          {filtered.map(n => (
+            <button
+              key={n}
+              type="button"
+              onMouseDown={e => { e.preventDefault(); pick(n) }}
+              onTouchStart={() => pick(n)}
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-accent transition-colors border-b border-border last:border-0"
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function Field({ label, value, icon: Icon }: { label: string; value?: string; icon?: React.ElementType }) {
   if (!value) return null
@@ -452,22 +525,26 @@ export default function Passport() {
                   <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest mb-3">Personal Information</p>
                   <div className="space-y-3">
                     <LabeledInput label="Full Name (as on passport)" value={buf.fullName} onChange={v => setBuf(b => ({ ...b, fullName: v.toUpperCase() }))} placeholder="DELA CRUZ JUAN" icon={User} />
-                    <div className="grid grid-cols-2 gap-3">
-                      <LabeledInput label="Nationality" value={buf.nationality} onChange={v => setBuf(b => ({ ...b, nationality: v }))} placeholder="Filipino" icon={Flag} />
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-                          <User className="h-3 w-3" /> Gender
-                        </label>
-                        <select
-                          value={buf.gender || ''}
-                          onChange={e => setBuf(b => ({ ...b, gender: e.target.value }))}
-                          className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
-                        >
-                          <option value="">— Select —</option>
-                          <option value="M">Male (M)</option>
-                          <option value="F">Female (F)</option>
-                          <option value="X">Non-binary (X)</option>
-                        </select>
+                    <NationalityPicker value={buf.nationality} onChange={v => setBuf(b => ({ ...b, nationality: v }))} />
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                        <User className="h-3 w-3" /> Gender
+                      </label>
+                      <div className="flex gap-2">
+                        {[['M', 'Male'], ['F', 'Female'], ['X', 'Other']] .map(([val, lbl]) => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => setBuf(b => ({ ...b, gender: b.gender === val ? '' : val }))}
+                            className={`flex-1 py-3 rounded-xl text-xs font-bold border transition-all active:scale-95 ${
+                              buf.gender === val
+                                ? 'bg-primary text-white border-primary shadow-sm'
+                                : 'bg-muted border-border text-muted-foreground'
+                            }`}
+                          >
+                            {lbl}
+                          </button>
+                        ))}
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
