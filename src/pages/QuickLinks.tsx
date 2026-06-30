@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Link2, Plus, Trash2, Edit2, ExternalLink, X,
-  Plane, Building, MapPin, FileText, Shield, Bus, Star, Sparkles
+  Plane, Building, MapPin, FileText, Shield, Bus, Star, Sparkles, Layers
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import type { QuickLink } from '@/types'
@@ -166,6 +167,7 @@ function domainOf(url: string) {
 }
 
 export default function QuickLinks() {
+  const navigate = useNavigate()
   const { trip, updateTrip } = useTrip()
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editing, setEditing] = useState<QuickLink | null>(null)
@@ -227,6 +229,12 @@ export default function QuickLinks() {
             <Link2 className="h-5 w-5 text-cyan-600" />
           </div>
           <div>
+            {trip.tripInfo.name && (
+              <button onClick={() => navigate('/trips')} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground uppercase tracking-widest mb-0.5 active:scale-95 transition-all">
+                <Layers className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate max-w-[55vw]">{trip.tripInfo.name}</span>
+              </button>
+            )}
             <h1 className="text-lg font-bold leading-tight">Quick Links</h1>
             <p className="text-xs text-muted-foreground leading-none mt-0.5">
               {trip.quickLinks.length} link{trip.quickLinks.length !== 1 ? 's' : ''}

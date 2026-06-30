@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import {
   Map, Plus, Edit2, Trash2, ChevronDown, ChevronUp,
-  Utensils, Bus, Landmark, Hotel, ShoppingBag, Star, MoreHorizontal, Check, Circle, ArrowDownToLine, X, MapPin,
+  Utensils, Bus, Landmark, Hotel, ShoppingBag, Star, MoreHorizontal, Check, Circle, ArrowDownToLine, X, MapPin, Layers,
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import type { ItineraryDay, ItineraryActivity } from '@/types'
@@ -104,6 +105,7 @@ const defaultDay = (): ItineraryDay => ({
 })
 
 export default function Timeline() {
+  const navigate = useNavigate()
   const { trip, updateTrip } = useTrip()
   const tripId = trip.tripInfo.id
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
@@ -307,6 +309,12 @@ export default function Timeline() {
             <Map className="h-5 w-5 text-emerald-600" />
           </div>
           <div>
+            {trip.tripInfo.name && (
+              <button onClick={() => navigate('/trips')} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground uppercase tracking-widest mb-0.5 active:scale-95 transition-all">
+                <Layers className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate max-w-[55vw]">{trip.tripInfo.name}</span>
+              </button>
+            )}
             <h1 className="text-lg font-bold leading-tight">Timeline</h1>
             <p className="text-xs text-muted-foreground leading-none mt-0.5">{subtitle}</p>
           </div>

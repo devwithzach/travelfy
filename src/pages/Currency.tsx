@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { DollarSign, RefreshCw, ArrowUpDown, Loader2, Cloud, CloudOff, ChevronDown, X } from 'lucide-react'
+import { DollarSign, RefreshCw, ArrowUpDown, Loader2, Cloud, CloudOff, ChevronDown, X, Layers } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import { getRate as sharedGetRate, guessLocalCurrency } from '@/utils/currency'
 import { fetchRates } from '@/utils/fxApi'
@@ -238,6 +239,7 @@ function CurrencyPickerSheet({
 }
 
 export default function Currency() {
+  const navigate = useNavigate()
   const { trip, updateTrip } = useTrip()
   const home = trip.settings.homeCurrency || 'PHP'
   const local = guessLocalCurrency(trip.tripInfo.destination, home)
@@ -349,6 +351,12 @@ export default function Currency() {
             <DollarSign className="h-5 w-5 text-emerald-600" />
           </div>
           <div>
+            {trip.tripInfo.name && (
+              <button onClick={() => navigate('/trips')} className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground uppercase tracking-widest mb-0.5 active:scale-95 transition-all">
+                <Layers className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate max-w-[55vw]">{trip.tripInfo.name}</span>
+              </button>
+            )}
             <h1 className="text-lg font-bold leading-tight">Currency</h1>
             <p className="text-xs text-muted-foreground leading-none mt-0.5">Converter & live rates</p>
           </div>
