@@ -58,8 +58,8 @@ function NationalityPicker({ value, onChange }: { value: string; onChange: (v: s
   const ref = useRef<HTMLDivElement>(null)
 
   const filtered = query.length > 0
-    ? NATIONALITIES.filter(n => n.toLowerCase().startsWith(query.toLowerCase())).slice(0, 8)
-    : NATIONALITIES.slice(0, 8)
+    ? NATIONALITIES.filter(n => n.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
+    : []
 
   const pick = (n: string) => { onChange(n); setQuery(n); setOpen(false) }
 
@@ -72,7 +72,7 @@ function NationalityPicker({ value, onChange }: { value: string; onChange: (v: s
         type="text"
         value={query}
         onChange={e => { setQuery(e.target.value); setOpen(true) }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => { if (query.length > 0) setOpen(true) }}
         placeholder="Filipino"
         className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
       />
