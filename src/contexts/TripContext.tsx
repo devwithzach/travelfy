@@ -27,6 +27,8 @@ interface TripContextValue {
   refreshTrip: () => Promise<void>
   /** Clone an existing trip's structure (no expenses, no photos, no per-day dates). */
   duplicateTrip: (sourceId: string, overrides?: { name?: string }) => Promise<string>
+  /** Update just name/destination/dates/description without loading the full trip. */
+  updateTripBasic: (tripId: string, info: { name: string; destination: string; startDate: string; endDate: string; description: string }) => Promise<void>
 }
 
 const TripContext = createContext<TripContextValue | null>(null)
@@ -255,6 +257,27 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     return newId
   }, [userId])
 
+  const updateTripBasic = useCallback(async (
+    tripId: string,
+    info: { name: string; destination: string; startDate: string; endDate: string; description: string },
+  ) => {
+    if (!userId) return
+    await storageService.updateTripBasic(userId, tripId, info)
+    setTrips(prev => prev.map(t => t.id !== tripId ? t : {
+      ...t,
+      name: info.name,
+      destination: info.destination,
+      startDate: info.startDate,
+      endDate: info.endDate,
+    }))
+    if (activeTripId === tripId) {
+      setTrip(prev => ({
+        ...prev,
+        tripInfo: { ...prev.tripInfo, ...info },
+      }))
+    }
+  }, [userId, activeTripId])
+
   const importTrip = useCallback(async (json: string) => {
     if (!userId) return false
     const ok = await storageService.importTrip(userId, json)
@@ -270,7 +293,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       trip, trips, activeTripId, loading, tripLoading, error, clearError,
       selectTrip, exitTrip, createNewTrip, deleteTripById,
       updateTrip, resetTrip, exportTrip, importTrip, seedSampleTrip,
-      refreshTrip, duplicateTrip,
+      refreshTrip, duplicateTrip, updateTripBasic,
     }}>
       {children}
     </TripContext.Provider>

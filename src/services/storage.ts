@@ -308,6 +308,20 @@ export const storageService = {
     await supabase.from('trips').delete().eq('id', tripId).eq('user_id', userId)
   },
 
+  async updateTripBasic(
+    userId: string,
+    tripId: string,
+    info: { name: string; destination: string; startDate: string; endDate: string; description: string },
+  ): Promise<void> {
+    await supabase.from('trips').update({
+      name: info.name,
+      destination: info.destination,
+      start_date: info.startDate,
+      end_date: info.endDate,
+      description: info.description,
+    }).eq('id', tripId).eq('user_id', userId)
+  },
+
   async saveTrip(userId: string, trip: TripData): Promise<void> {
     const tripId = trip.tripInfo.id
 
