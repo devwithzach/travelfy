@@ -2,13 +2,135 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Link2, Plus, Trash2, Edit2, ExternalLink, X,
-  Plane, Building, MapPin, FileText, Shield, Bus, Star
+  Plane, Building, MapPin, FileText, Shield, Bus, Star, Sparkles
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import type { QuickLink } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/utils/cn'
+
+// Nationality → suggested quick links
+// Key is a substring match against passport.nationality (case-insensitive)
+type SuggestedLink = Omit<QuickLink, 'id'>
+
+const NATIONALITY_SUGGESTIONS: Array<{ match: string[]; links: SuggestedLink[] }> = [
+  {
+    match: ['filipino', 'philippine'],
+    links: [
+      { title: 'DFA Passport Appointment', url: 'https://passport.gov.ph', icon: 'file-text', category: 'immigration' },
+      { title: 'eTravel Philippines', url: 'https://etravel.gov.ph', icon: 'file-text', category: 'immigration' },
+      { title: 'Bureau of Immigration', url: 'https://www.immigration.gov.ph', icon: 'shield', category: 'immigration' },
+      { title: 'Philippine Airlines', url: 'https://www.philippineairlines.com', icon: 'plane', category: 'airline' },
+      { title: 'Cebu Pacific', url: 'https://www.cebupacificair.com', icon: 'plane', category: 'airline' },
+      { title: 'AirAsia Philippines', url: 'https://www.airasia.com', icon: 'plane', category: 'airline' },
+    ],
+  },
+  {
+    match: ['american', 'united states'],
+    links: [
+      { title: 'US Passport Renewal', url: 'https://travel.state.gov', icon: 'file-text', category: 'immigration' },
+      { title: 'ESTA Visa Waiver', url: 'https://esta.cbp.dhs.gov', icon: 'shield', category: 'immigration' },
+      { title: 'American Airlines', url: 'https://www.aa.com', icon: 'plane', category: 'airline' },
+      { title: 'Delta Airlines', url: 'https://www.delta.com', icon: 'plane', category: 'airline' },
+      { title: 'United Airlines', url: 'https://www.united.com', icon: 'plane', category: 'airline' },
+    ],
+  },
+  {
+    match: ['british', 'english', 'uk'],
+    links: [
+      { title: 'HMPO Passport', url: 'https://www.gov.uk/renew-adult-passport', icon: 'file-text', category: 'immigration' },
+      { title: 'UK ETIAS', url: 'https://www.gov.uk/foreign-travel-advice', icon: 'shield', category: 'immigration' },
+      { title: 'British Airways', url: 'https://www.britishairways.com', icon: 'plane', category: 'airline' },
+      { title: 'easyJet', url: 'https://www.easyjet.com', icon: 'plane', category: 'airline' },
+    ],
+  },
+  {
+    match: ['australian'],
+    links: [
+      { title: 'Australian Passport', url: 'https://www.passports.gov.au', icon: 'file-text', category: 'immigration' },
+      { title: 'SmartGate / IPC', url: 'https://www.abf.gov.au', icon: 'shield', category: 'immigration' },
+      { title: 'Qantas', url: 'https://www.qantas.com', icon: 'plane', category: 'airline' },
+      { title: 'Jetstar', url: 'https://www.jetstar.com', icon: 'plane', category: 'airline' },
+    ],
+  },
+  {
+    match: ['indian'],
+    links: [
+      { title: 'Passport Seva (India)', url: 'https://www.passportindia.gov.in', icon: 'file-text', category: 'immigration' },
+      { title: 'FRRO Online', url: 'https://frro.gov.in', icon: 'shield', category: 'immigration' },
+      { title: 'Air India', url: 'https://www.airindia.com', icon: 'plane', category: 'airline' },
+      { title: 'IndiGo', url: 'https://www.goindigo.in', icon: 'plane', category: 'airline' },
+    ],
+  },
+  {
+    match: ['singaporean'],
+    links: [
+      { title: 'ICA Singapore', url: 'https://www.ica.gov.sg', icon: 'file-text', category: 'immigration' },
+      { title: 'Singapore Airlines', url: 'https://www.singaporeair.com', icon: 'plane', category: 'airline' },
+      { title: 'Scoot', url: 'https://www.flyscoot.com', icon: 'plane', category: 'airline' },
+    ],
+  },
+  {
+    match: ['japanese'],
+    links: [
+      { title: 'Japan Passport (MOFA)', url: 'https://www.mofa.go.jp', icon: 'file-text', category: 'immigration' },
+      { title: 'Japan Airlines', url: 'https://www.jal.com', icon: 'plane', category: 'airline' },
+      { title: 'ANA', url: 'https://www.ana.co.jp', icon: 'plane', category: 'airline' },
+    ],
+  },
+  {
+    match: ['korean'],
+    links: [
+      { title: 'Korean Passport (MOFA)', url: 'https://www.passport.go.kr', icon: 'file-text', category: 'immigration' },
+      { title: 'Korean Air', url: 'https://www.koreanair.com', icon: 'plane', category: 'airline' },
+      { title: 'Asiana Airlines', url: 'https://www.flyasiana.com', icon: 'plane', category: 'airline' },
+    ],
+  },
+  {
+    match: ['chinese'],
+    links: [
+      { title: 'China Passport (MPS)', url: 'https://www.mps.gov.cn', icon: 'file-text', category: 'immigration' },
+      { title: 'Air China', url: 'https://www.airchina.com', icon: 'plane', category: 'airline' },
+      { title: 'China Eastern', url: 'https://www.ceair.com', icon: 'plane', category: 'airline' },
+    ],
+  },
+  {
+    match: ['malaysian'],
+    links: [
+      { title: 'MyTravelPass (JPN)', url: 'https://www.jpn.gov.my', icon: 'file-text', category: 'immigration' },
+      { title: 'Malaysia Airlines', url: 'https://www.malaysiaairlines.com', icon: 'plane', category: 'airline' },
+      { title: 'AirAsia', url: 'https://www.airasia.com', icon: 'plane', category: 'airline' },
+    ],
+  },
+  {
+    match: ['indonesian'],
+    links: [
+      { title: 'Ditjen Imigrasi', url: 'https://www.imigrasi.go.id', icon: 'file-text', category: 'immigration' },
+      { title: 'Garuda Indonesia', url: 'https://www.garuda-indonesia.com', icon: 'plane', category: 'airline' },
+      { title: 'Lion Air', url: 'https://www.lionair.co.id', icon: 'plane', category: 'airline' },
+    ],
+  },
+]
+
+// Always-available universal suggestions
+const UNIVERSAL_SUGGESTIONS: SuggestedLink[] = [
+  { title: 'Google Maps', url: 'https://maps.google.com', icon: 'map-pin', category: 'maps' },
+  { title: 'Google Translate', url: 'https://translate.google.com', icon: 'star', category: 'other' },
+  { title: 'XE Currency Converter', url: 'https://www.xe.com', icon: 'star', category: 'other' },
+  { title: 'Skyscanner', url: 'https://www.skyscanner.com', icon: 'plane', category: 'airline' },
+  { title: 'Booking.com', url: 'https://www.booking.com', icon: 'building', category: 'hotel' },
+  { title: 'Airbnb', url: 'https://www.airbnb.com', icon: 'building', category: 'hotel' },
+  { title: 'Agoda', url: 'https://www.agoda.com', icon: 'building', category: 'hotel' },
+  { title: 'Grab', url: 'https://www.grab.com', icon: 'bus', category: 'transport' },
+]
+
+function getSuggestions(nationality: string, existingUrls: Set<string>): SuggestedLink[] {
+  const nat = nationality.toLowerCase()
+  const natMatches = NATIONALITY_SUGGESTIONS.find(s => s.match.some(m => nat.includes(m)))
+  const candidates = [...(natMatches?.links ?? []), ...UNIVERSAL_SUGGESTIONS]
+  return candidates.filter(s => !existingUrls.has(s.url)).slice(0, 6)
+}
 
 const iconMap: Record<string, React.ElementType> = {
   plane: Plane,
@@ -47,6 +169,23 @@ export default function QuickLinks() {
   const { trip, updateTrip } = useTrip()
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editing, setEditing] = useState<QuickLink | null>(null)
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(new Set())
+
+  const existingUrls = new Set(trip.quickLinks.map(l => l.url))
+  const nationality = trip.passport?.nationality ?? ''
+  const suggestions = getSuggestions(nationality, existingUrls)
+    .filter(s => !dismissedSuggestions.has(s.url))
+
+  const addSuggestion = (s: SuggestedLink) => {
+    updateTrip(prev => ({
+      ...prev,
+      quickLinks: [...prev.quickLinks, { ...s, id: crypto.randomUUID() }],
+    }))
+  }
+
+  const dismissSuggestion = (url: string) => {
+    setDismissedSuggestions(prev => new Set([...prev, url]))
+  }
 
   const openAdd = () => { setEditing(defaultLink()); setSheetOpen(true) }
   const openEdit = (l: QuickLink) => { setEditing({ ...l }); setSheetOpen(true) }
@@ -105,6 +244,51 @@ export default function QuickLinks() {
       </div>
 
       <div className="px-4 pb-6 space-y-5">
+        {/* ── Suggested Links ── */}
+        {suggestions.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-2 px-1">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs font-semibold text-primary">
+                Suggested{nationality ? ` for ${nationality}` : ''}
+              </span>
+            </div>
+            <div className="rounded-2xl bg-primary/5 border border-primary/15 overflow-hidden divide-y divide-primary/10">
+              {suggestions.map(s => {
+                const IconComp = iconMap[s.icon] || Link2
+                const cfg = categoryConfig[s.category] ?? categoryConfig.other
+                return (
+                  <div key={s.url} className="flex items-center gap-3 px-4 py-3">
+                    <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-white text-xs', cfg.bg)}>
+                      <IconComp className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold leading-tight truncate">{s.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{domainOf(s.url)}</p>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <button
+                        onClick={() => addSuggestion(s)}
+                        className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center hover:bg-primary/80 active:scale-95 transition-all"
+                        aria-label="Add"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => dismissSuggestion(s.url)}
+                        className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center hover:bg-accent active:scale-95 transition-all"
+                        aria-label="Dismiss"
+                      >
+                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {trip.quickLinks.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4 px-8 text-center">
             <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center">
