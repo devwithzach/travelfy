@@ -147,7 +147,8 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
         preprocessImage(file),
       ])
 
-      const worker = await Tesseract.createWorker('eng', 1, {
+      const worker = await Tesseract.createWorker('mrz', 1, {
+        langPath: '/tessdata',
         logger: (m: any) => {
           if (m.status === 'recognizing text') setProgress(Math.round(m.progress * 100))
         },
@@ -155,7 +156,7 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
 
       await worker.setParameters({
         tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
-        tessedit_pageseg_mode: '11' as any, // sparse text — best for MRZ lines
+        tessedit_pageseg_mode: '6' as any,
       })
 
       const { data: { text } } = await worker.recognize(processedBlob)
