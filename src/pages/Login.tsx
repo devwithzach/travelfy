@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plane, Mail, Lock, Eye, EyeOff, AlertCircle,
-  Map, CalendarDays, DollarSign, Camera, Shield, CheckCircle2
+  Map, CalendarDays, DollarSign, Camera, Shield, CheckCircle2, User
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
@@ -23,9 +23,12 @@ export default function Login() {
   const { signIn, signUp } = useAuth()
   const navigate = useNavigate()
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -37,7 +40,12 @@ export default function Login() {
     setLoading(true)
 
     if (mode === 'signup') {
-      const { error } = await signUp(email, password)
+      if (password !== confirmPassword) {
+        setError('Passwords do not match.')
+        setLoading(false)
+        return
+      }
+      const { error } = await signUp(email, password, name)
       if (error) {
         setError(error)
       } else {
@@ -60,6 +68,8 @@ export default function Login() {
     setMode(m => m === 'signin' ? 'signup' : 'signin')
     setError(null)
     setSuccess(null)
+    setName('')
+    setConfirmPassword('')
   }
 
   return (
@@ -186,7 +196,7 @@ export default function Login() {
             {(['signin', 'signup'] as const).map(m => (
               <button
                 key={m}
-                onClick={() => { setMode(m); setError(null); setSuccess(null) }}
+                onClick={() => { setMode(m); setError(null); setSuccess(null); setName(''); setConfirmPassword('') }}
                 className={cn(
                   'flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200',
                   mode === m
@@ -221,6 +231,36 @@ export default function Login() {
           </AnimatePresence>
 
           <form onSubmit={handleSubmit} className="space-y-4 lg:max-w-sm">
+            <AnimatePresence>
+              {mode === 'signup' && (
+                <motion.div
+                  key="name-field"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Full Name
+                    </Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        placeholder="Zach Campaner"
+                        className="pl-10"
+                        autoComplete="name"
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 Email
@@ -264,6 +304,50 @@ export default function Login() {
                 </button>
               </div>
             </div>
+
+            <AnimatePresence>
+              {mode === 'signup' && (
+                <motion.div
+                  key="confirm-field"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      Confirm Password
+                    </Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type={showConfirm ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={e => setConfirmPassword(e.target.value)}
+                        placeholder="Re-enter your password"
+                        className={`pl-10 pr-10 ${confirmPassword && confirmPassword !== password ? 'border-destructive focus-visible:ring-destructive/30' : ''}`}
+                        required={mode === 'signup'}
+                        minLength={6}
+                        autoComplete="new-password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirm(!showConfirm)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {confirmPassword && confirmPassword !== password && (
+                      <p className="text-xs text-destructive flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3" /> Passwords don't match
+                      </p>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <AnimatePresence>
               {error && (

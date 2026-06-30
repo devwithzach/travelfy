@@ -440,28 +440,32 @@ export default function Photos() {
     if (!lightboxPhoto) return
     setEditSaving(true)
     setEditError(null)
+    try {
+      const selectedDay = trip.itinerary.find(d => d.id === editDayId)
+      const selectedActivity = selectedDay?.activities.find(a => a.id === editActivityId)
+      const newActivityTag = selectedDay
+        ? `Day ${selectedDay.dayNumber} – ${selectedDay.title}${selectedActivity ? ` · ${selectedActivity.title}` : ''}`
+        : lightboxPhoto.activity_tag // keep existing if no new day selected
 
-    const selectedDay = trip.itinerary.find(d => d.id === editDayId)
-    const selectedActivity = selectedDay?.activities.find(a => a.id === editActivityId)
-    const activityLabel = selectedDay
-      ? `Day ${selectedDay.dayNumber} – ${selectedDay.title}${selectedActivity ? ` · ${selectedActivity.title}` : ''}`
-      : lightboxPhoto.activity_tag // keep existing if no day selected
+      const { error } = await supabase.from('trip_photos').update({
+        caption: editCaption,
+        location_tag: editLocationTag,
+        activity_tag: newActivityTag,
+      }).eq('id', lightboxPhoto.id)
 
-    const { error } = await supabase.from('trip_photos').update({
-      caption: editCaption,
-      location_tag: editLocationTag,
-      activity_tag: editDayId ? activityLabel : editActivityId === '' && editDayId === '' ? '' : lightboxPhoto.activity_tag,
-    }).eq('id', lightboxPhoto.id)
+      if (error) throw error
 
-    setEditSaving(false)
-    if (error) { setEditError(error.message); return }
-
-    setPhotos(prev => prev.map(p => p.id === lightboxPhoto.id
-      ? { ...p, caption: editCaption, location_tag: editLocationTag, activity_tag: editDayId ? activityLabel : p.activity_tag }
-      : p
-    ))
-    setEditSaved(true)
-    setTimeout(() => { setEditSaved(false); setShowEditSheet(false) }, 800)
+      setPhotos(prev => prev.map(p => p.id === lightboxPhoto.id
+        ? { ...p, caption: editCaption, location_tag: editLocationTag, activity_tag: newActivityTag }
+        : p
+      ))
+      setEditSaved(true)
+      setTimeout(() => { setEditSaved(false); setShowEditSheet(false) }, 900)
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Save failed')
+    } finally {
+      setEditSaving(false)
+    }
   }
 
   // ── Delete photo ─────────────────────────────────────────────
@@ -920,73 +924,102 @@ export default function Photos() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[60] bg-black/70"
+              className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
               onClick={() => { if (!editSaving) setShowEditSheet(false) }}
             />
             <motion.div
               initial={{ y: '100%' }}
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 28 }}
-              className="fixed bottom-0 left-0 right-0 z-[61] bg-background rounded-t-3xl shadow-2xl max-h-[90vh] overflow-y-auto"
+              transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+              className="fixed bottom-0 left-0 right-0 z-[61] bg-background rounded-t-3xl shadow-2xl max-h-[92vh] overflow-y-auto"
             >
-              <div className="flex items-center justify-between px-5 pt-5 pb-3">
-                <h2 className="text-lg font-bold">Edit Photo</h2>
+              {/* Handle */}
+              <div className="flex justify-center pt-3 pb-0">
+                <div className="w-10 h-1 rounded-full bg-border" />
+              </div>
+
+              {/* Header with thumbnail */}
+              <div className="flex items-center gap-3 px-5 pt-3 pb-4 border-b border-border">
+                {lightboxPhoto.public_url ? (
+                  <div className="w-14 h-14 rounded-xl overflow-hidden shrink-0 bg-muted">
+                    <img src={lightboxPhoto.public_url} alt="" className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                    <FileText className="h-6 w-6 text-primary/60" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base font-bold">Edit Details</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    {lightboxPhoto.caption || (lightboxPhoto.public_url ? 'No caption' : 'Note entry')}
+                  </p>
+                </div>
                 <button
                   onClick={() => { if (!editSaving) setShowEditSheet(false) }}
                   disabled={editSaving}
-                  className="w-8 h-8 rounded-full bg-muted flex items-center justify-center disabled:opacity-40"
+                  className="w-8 h-8 rounded-full bg-muted flex items-center justify-center disabled:opacity-40 shrink-0"
                   aria-label="Close"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
 
-              <div className="px-5 pb-8 space-y-4">
-                {/* Caption */}
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              <div className="px-5 pt-5 pb-10 space-y-5">
+
+                {/* Caption / Note */}
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    <FileText className="h-3 w-3" />
                     {lightboxPhoto.public_url ? 'Caption' : 'Note / Memory'}
                   </label>
-                  <input
+                  <textarea
                     value={editCaption}
                     onChange={e => setEditCaption(e.target.value)}
                     placeholder="Describe this moment…"
-                    className="mt-1.5 w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    rows={3}
+                    className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none leading-relaxed"
                   />
                 </div>
 
                 {/* Location */}
-                <div className="relative">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                <div className="space-y-1.5 relative">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     <MapPin className="h-3 w-3" /> Location
                   </label>
-                  <input
-                    value={editLocationTag}
-                    onChange={e => onEditLocationInput(e.target.value)}
-                    onBlur={() => setTimeout(() => setShowEditSuggestions(false), 200)}
-                    onFocus={() => editLocationSuggestions.length > 0 && setShowEditSuggestions(true)}
-                    placeholder="e.g. Hotel Guia, Macau…"
-                    className="mt-1.5 w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                  />
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <input
+                      value={editLocationTag}
+                      onChange={e => onEditLocationInput(e.target.value)}
+                      onBlur={() => setTimeout(() => setShowEditSuggestions(false), 200)}
+                      onFocus={() => editLocationSuggestions.length > 0 && setShowEditSuggestions(true)}
+                      placeholder="Search a place…"
+                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    />
+                  </div>
                   <AnimatePresence>
                     {showEditSuggestions && editLocationSuggestions.length > 0 && (
                       <motion.div
                         initial={{ opacity: 0, y: -4 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -4 }}
-                        className="absolute left-0 right-0 top-full mt-1 z-10 bg-background border border-border rounded-xl shadow-xl overflow-hidden"
+                        className="absolute left-0 right-0 top-full mt-1 z-20 bg-background border border-border rounded-xl shadow-xl overflow-hidden"
                       >
                         {editLocationSuggestions.map(s => (
                           <button
                             key={s.place_id}
                             onMouseDown={() => pickEditSuggestion(s)}
-                            className="w-full px-4 py-2.5 text-left text-sm hover:bg-muted transition-colors flex flex-col gap-0.5"
+                            className="w-full px-4 py-3 text-left text-sm hover:bg-muted transition-colors flex items-start gap-3 border-b border-border last:border-0"
                           >
-                            <span className="font-medium truncate">{s.display_name.split(',')[0]}</span>
-                            <span className="text-xs text-muted-foreground truncate">
-                              {s.display_name.split(',').slice(1, 3).join(',')}
-                            </span>
+                            <MapPin className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">{s.display_name.split(',')[0]}</p>
+                              <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                {s.display_name.split(',').slice(1, 3).join(',')}
+                              </p>
+                            </div>
                           </button>
                         ))}
                       </motion.div>
@@ -995,50 +1028,58 @@ export default function Photos() {
                 </div>
 
                 {/* Itinerary Tag */}
-                <div>
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                    <Tag className="h-3 w-3" /> Link to Itinerary
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    <Tag className="h-3 w-3" /> Itinerary Day
                   </label>
                   {lightboxPhoto.activity_tag && !editDayId && (
-                    <p className="mt-1 text-xs text-muted-foreground">Current: <span className="text-foreground">{lightboxPhoto.activity_tag}</span></p>
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/8 border border-primary/20">
+                      <Tag className="h-3.5 w-3.5 text-primary shrink-0" />
+                      <span className="text-xs text-primary font-medium truncate">{lightboxPhoto.activity_tag}</span>
+                    </div>
                   )}
-                  <div className="mt-1.5 flex flex-col gap-2">
+                  <select
+                    value={editDayId}
+                    onChange={e => { setEditDayId(e.target.value); setEditActivityId('') }}
+                    className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                  >
+                    <option value="">— {lightboxPhoto.activity_tag ? 'Change day' : 'Select day'} —</option>
+                    {trip.itinerary.map(d => (
+                      <option key={d.id} value={d.id}>Day {d.dayNumber} – {d.title}</option>
+                    ))}
+                  </select>
+                  {editDayId && (
                     <select
-                      value={editDayId}
-                      onChange={e => { setEditDayId(e.target.value); setEditActivityId('') }}
+                      value={editActivityId}
+                      onChange={e => setEditActivityId(e.target.value)}
                       className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
                     >
-                      <option value="">— Keep existing / Select Day —</option>
-                      {trip.itinerary.map(d => (
-                        <option key={d.id} value={d.id}>Day {d.dayNumber} – {d.title}</option>
+                      <option value="">— Activity (optional) —</option>
+                      {(trip.itinerary.find(d => d.id === editDayId)?.activities || []).map(a => (
+                        <option key={a.id} value={a.id}>{a.time} – {a.title}</option>
                       ))}
                     </select>
-                    {editDayId && (
-                      <select
-                        value={editActivityId}
-                        onChange={e => setEditActivityId(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
-                      >
-                        <option value="">— Select Activity (optional) —</option>
-                        {(trip.itinerary.find(d => d.id === editDayId)?.activities || []).map(a => (
-                          <option key={a.id} value={a.id}>{a.time} – {a.title}</option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
+                  )}
                 </div>
 
                 {editError && (
-                  <div className="px-3 py-2 rounded-xl bg-destructive/10 text-destructive text-xs">{editError}</div>
+                  <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                    <X className="h-4 w-4 shrink-0" />
+                    <span>{editError}</span>
+                  </div>
                 )}
 
                 <button
                   onClick={saveEdit}
                   disabled={editSaving || editSaved}
-                  className="w-full py-4 rounded-2xl gradient-brand text-white font-bold text-sm shadow-lg flex items-center justify-center gap-2 disabled:opacity-60"
+                  className="w-full py-4 rounded-2xl gradient-brand text-white font-bold text-sm shadow-lg flex items-center justify-center gap-2 disabled:opacity-60 transition-opacity"
                 >
-                  {editSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : editSaved ? <Check className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
-                  {editSaved ? 'Saved!' : editSaving ? 'Saving…' : 'Save Changes'}
+                  {editSaving
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</>
+                    : editSaved
+                    ? <><Check className="h-4 w-4" /> Saved!</>
+                    : <><Check className="h-4 w-4" /> Save Changes</>
+                  }
                 </button>
               </div>
             </motion.div>
