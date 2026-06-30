@@ -149,6 +149,8 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
 
       const worker = await Tesseract.createWorker('mrz', 1, {
         langPath: `${window.location.origin}/tessdata`,
+        gzip: false,
+        cacheMethod: 'refresh',
         logger: (m: any) => {
           if (m.status === 'recognizing text') setProgress(Math.round(m.progress * 100))
         },
