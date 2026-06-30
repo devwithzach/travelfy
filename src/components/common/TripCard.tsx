@@ -141,13 +141,13 @@ export default function TripCard({ trip, onSelect, onDelete, onDuplicate, onEdit
         </div>
       </button>
 
-      <div className="absolute top-3 right-3 flex items-center gap-1.5">
+      <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
         {onEdit && (
           <button
             onClick={e => { e.stopPropagation(); onEdit() }}
             aria-label="Edit trip"
             title="Edit trip details"
-            className="p-2 rounded-xl bg-black/20 hover:bg-black/40 text-white backdrop-blur-sm transition-colors"
+            className="p-2.5 rounded-xl bg-black/30 hover:bg-black/50 text-white backdrop-blur-sm transition-colors active:scale-90"
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
@@ -157,7 +157,7 @@ export default function TripCard({ trip, onSelect, onDelete, onDuplicate, onEdit
             onClick={e => { e.stopPropagation(); onDuplicate() }}
             aria-label="Duplicate trip as template"
             title="Use as template for a new trip"
-            className="p-2 rounded-xl bg-black/20 hover:bg-black/40 text-white backdrop-blur-sm transition-colors"
+            className="p-2.5 rounded-xl bg-black/30 hover:bg-black/50 text-white backdrop-blur-sm transition-colors active:scale-90"
           >
             <Copy className="h-3.5 w-3.5" />
           </button>
@@ -166,7 +166,7 @@ export default function TripCard({ trip, onSelect, onDelete, onDuplicate, onEdit
           <button
             onClick={e => { e.stopPropagation(); onDelete() }}
             aria-label="Delete trip"
-            className="p-2 rounded-xl bg-black/20 hover:bg-black/40 text-white backdrop-blur-sm transition-colors"
+            className="p-2.5 rounded-xl bg-black/30 hover:bg-black/50 text-white backdrop-blur-sm transition-colors active:scale-90"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
