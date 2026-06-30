@@ -201,6 +201,8 @@ async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripDa
             gender: p.gender || undefined,
             placeOfBirth: p.place_of_birth || undefined,
             mrz: p.mrz || undefined,
+            issuingAuthority: p.issuing_authority || undefined,
+            passportType: p.passport_type || undefined,
           }
         })()
       : createEmptyTrip().passport,
@@ -433,6 +435,8 @@ export const storageService = {
         gender: trip.passport.gender ?? '',
         place_of_birth: trip.passport.placeOfBirth ?? '',
         mrz: trip.passport.mrz ?? '',
+        issuing_authority: trip.passport.issuingAuthority ?? '',
+        passport_type: trip.passport.passportType ?? '',
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' }),
 
@@ -497,6 +501,8 @@ export const storageService = {
       gender: passport.gender ?? '',
       place_of_birth: passport.placeOfBirth ?? '',
       mrz: passport.mrz ?? '',
+      issuing_authority: passport.issuingAuthority ?? '',
+      passport_type: passport.passportType ?? '',
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
   },

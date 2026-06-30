@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Globe, Edit2, AlertTriangle, Shield, Plus, Trash2, X,
   Check, Loader2, CalendarDays, Hash, MapPin, User, Flag,
-  Clock
+  Clock, Building2, BookOpen
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -87,6 +87,81 @@ function NationalityPicker({ value, onChange }: { value: string; onChange: (v: s
               className="w-full text-left px-4 py-2.5 text-sm hover:bg-accent transition-colors border-b border-border last:border-0"
             >
               {n}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const COUNTRIES = [
+  'Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina',
+  'Armenia','Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados',
+  'Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina',
+  'Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cambodia','Cameroon',
+  'Canada','Cape Verde','Central African Republic','Chad','Chile','China','Colombia',
+  'Comoros','Congo','Costa Rica','Croatia','Cuba','Cyprus','Czech Republic','Denmark',
+  'Djibouti','Dominica','Dominican Republic','East Timor','Ecuador','Egypt',
+  'El Salvador','Equatorial Guinea','Eritrea','Estonia','Eswatini','Ethiopia','Fiji',
+  'Finland','France','Gabon','Gambia','Georgia','Germany','Ghana','Greece','Grenada',
+  'Guatemala','Guinea','Guinea-Bissau','Guyana','Haiti','Honduras','Hungary','Iceland',
+  'India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Jamaica','Japan',
+  'Jordan','Kazakhstan','Kenya','Kiribati','Kuwait','Kyrgyzstan','Laos','Latvia',
+  'Lebanon','Lesotho','Liberia','Libya','Liechtenstein','Lithuania','Luxembourg',
+  'Madagascar','Malawi','Malaysia','Maldives','Mali','Malta','Marshall Islands',
+  'Mauritania','Mauritius','Mexico','Micronesia','Moldova','Monaco','Mongolia',
+  'Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nauru','Nepal',
+  'Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea',
+  'North Macedonia','Norway','Oman','Pakistan','Palau','Palestine','Panama',
+  'Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar',
+  'Romania','Russia','Rwanda','Saint Kitts and Nevis','Saint Lucia',
+  'Saint Vincent and the Grenadines','Samoa','San Marino','Saudi Arabia','Senegal',
+  'Serbia','Seychelles','Sierra Leone','Singapore','Slovakia','Slovenia',
+  'Solomon Islands','Somalia','South Africa','South Korea','South Sudan','Spain',
+  'Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan',
+  'Tanzania','Thailand','Togo','Tonga','Trinidad and Tobago','Tunisia','Turkey',
+  'Turkmenistan','Tuvalu','Uganda','Ukraine','United Arab Emirates',
+  'United Kingdom','United States','Uruguay','Uzbekistan','Vanuatu','Vatican City',
+  'Venezuela','Vietnam','Yemen','Zambia','Zimbabwe',
+]
+
+function CountryPicker({ value, onChange, label = 'Country', icon: Icon = Globe }: {
+  value: string; onChange: (v: string) => void; label?: string; icon?: React.ElementType
+}) {
+  const [query, setQuery] = useState(value)
+  const [open, setOpen] = useState(false)
+
+  const filtered = query.length > 0
+    ? COUNTRIES.filter(c => c.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
+    : []
+
+  const pick = (c: string) => { onChange(c); setQuery(c); setOpen(false) }
+
+  return (
+    <div className="space-y-1.5 relative">
+      <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+        <Icon className="h-3 w-3" /> {label}
+      </label>
+      <input
+        type="text"
+        value={query}
+        onChange={e => { setQuery(e.target.value); setOpen(true) }}
+        onFocus={() => { if (query.length > 0) setOpen(true) }}
+        placeholder="Philippines"
+        className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute top-full left-0 right-0 z-[60] mt-1 bg-background border border-border rounded-xl shadow-xl overflow-hidden">
+          {filtered.map(c => (
+            <button
+              key={c}
+              type="button"
+              onMouseDown={e => { e.preventDefault(); pick(c) }}
+              onTouchStart={() => pick(c)}
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-accent transition-colors border-b border-border last:border-0"
+            >
+              {c}
             </button>
           ))}
         </div>
@@ -363,6 +438,8 @@ export default function Passport() {
               {passport.issueDate && <Field label="Issue Date" value={formatDate(passport.issueDate)} icon={CalendarDays} />}
               {passport.expiryDate && <Field label="Expiry Date" value={formatDate(passport.expiryDate)} icon={CalendarDays} />}
               {passport.issuingCountry && <Field label="Issuing Country" value={passport.issuingCountry} icon={Globe} />}
+              {passport.issuingAuthority && <Field label="Issuing Authority" value={passport.issuingAuthority} icon={Building2} />}
+              {passport.passportType && <Field label="Passport Type" value={passport.passportType === 'P' ? 'P — Regular' : passport.passportType === 'D' ? 'D — Diplomatic' : 'O — Official'} icon={BookOpen} />}
             </div>
           ) : (
             <div className="px-4 py-8 text-center">
@@ -560,8 +637,34 @@ export default function Passport() {
                 <div>
                   <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest mb-3">Document Details</p>
                   <div className="space-y-3">
-                    <LabeledInput label="Passport Number" value={buf.passportNumber} onChange={v => setBuf(b => ({ ...b, passportNumber: v.toUpperCase() }))} placeholder="P1234567A" icon={Hash} />
-                    <LabeledInput label="Issuing Country" value={buf.issuingCountry} onChange={v => setBuf(b => ({ ...b, issuingCountry: v }))} placeholder="Philippines" icon={Globe} />
+                    <div className="grid grid-cols-2 gap-3">
+                      <LabeledInput label="Passport Number" value={buf.passportNumber} onChange={v => setBuf(b => ({ ...b, passportNumber: v.toUpperCase() }))} placeholder="P1234567A" icon={Hash} />
+                      {/* Passport Type */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+                          <BookOpen className="h-3 w-3" /> Type
+                        </label>
+                        <div className="flex gap-2">
+                          {[['P', 'Regular'], ['D', 'Diplomat'], ['O', 'Official']].map(([val, lbl]) => (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() => setBuf(b => ({ ...b, passportType: b.passportType === val ? '' : val }))}
+                              className={`flex-1 py-3 rounded-xl text-[10px] font-bold border transition-all active:scale-95 leading-tight ${
+                                buf.passportType === val
+                                  ? 'bg-primary text-white border-primary shadow-sm'
+                                  : 'bg-muted border-border text-muted-foreground'
+                              }`}
+                            >
+                              <span className="block text-sm">{val}</span>
+                              {lbl}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <CountryPicker value={buf.issuingCountry} onChange={v => setBuf(b => ({ ...b, issuingCountry: v }))} label="Issuing Country" icon={Globe} />
+                    <LabeledInput label="Issuing Authority" value={buf.issuingAuthority || ''} onChange={v => setBuf(b => ({ ...b, issuingAuthority: v }))} placeholder="DFA Manila" icon={Building2} />
                     <div className="grid grid-cols-2 gap-3">
                       <LabeledInput label="Issue Date" value={buf.issueDate} onChange={v => setBuf(b => ({ ...b, issueDate: v }))} type="date" icon={CalendarDays} />
                       <LabeledInput label="Expiry Date" value={buf.expiryDate} onChange={v => setBuf(b => ({ ...b, expiryDate: v }))} type="date" icon={CalendarDays} />

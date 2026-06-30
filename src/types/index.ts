@@ -126,6 +126,8 @@ export interface PassportInfo {
   gender?: string
   placeOfBirth?: string
   mrz?: string
+  issuingAuthority?: string
+  passportType?: string
 }
 
 export interface VisaInfo {
