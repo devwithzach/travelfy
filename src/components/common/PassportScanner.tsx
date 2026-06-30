@@ -84,9 +84,9 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
     new Promise((resolve, reject) => {
       const img = new Image()
       img.onload = () => {
-        const cropTop = Math.floor(img.height * 0.85) // bottom 15% = MRZ only
+        const cropTop = Math.floor(img.height * 0.82) // bottom 18% = MRZ strip + margin
         const cropH = img.height - cropTop
-        const scale = 3 // more pixels → better OCR
+        const scale = 4 // more pixels → better OCR
         const canvas = document.createElement('canvas')
         canvas.width = img.width * scale
         canvas.height = cropH * scale
@@ -98,7 +98,7 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
         const d = imageData.data
         for (let i = 0; i < d.length; i += 4) {
           const gray = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2])
-          const contrast = Math.min(255, Math.max(0, ((gray - 128) * 2.5) + 128))
+          const contrast = gray > 128 ? 255 : 0 // hard threshold = pure B&W
           d[i] = d[i + 1] = d[i + 2] = contrast
         }
         ctx.putImageData(imageData, 0, 0)
@@ -147,10 +147,7 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
         preprocessImage(file),
       ])
 
-      const worker = await Tesseract.createWorker('mrz', 1, {
-        langPath: `${window.location.origin}/tessdata`,
-        gzip: false,
-        cacheMethod: 'refresh',
+      const worker = await Tesseract.createWorker('eng', 1, {
         logger: (m: any) => {
           if (m.status === 'recognizing text') setProgress(Math.round(m.progress * 100))
         },
