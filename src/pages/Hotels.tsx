@@ -169,7 +169,7 @@ export default function Hotels() {
                         variant="outline"
                         size="sm"
                         className="flex-1 h-8 text-xs"
-                        onClick={() => navigate('/map')}
+                        onClick={() => navigate('/map', { state: { hotelId: hotel.id } })}
                       >
                         <MapPin className="h-3.5 w-3.5 mr-1" />
                         Explore Map

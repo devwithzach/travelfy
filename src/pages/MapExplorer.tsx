@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import L from 'leaflet'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
@@ -258,6 +259,7 @@ function fmtDist(m: number): string {
 export default function MapExplorer() {
   const { trip } = useTrip()
   const { user } = useAuth()
+  const routerLocation = useLocation()
   const mapRef = useRef<L.Map | null>(null)
   const mapElRef = useRef<HTMLDivElement>(null)
   const markersRef = useRef<L.Layer[]>([])
@@ -456,6 +458,18 @@ export default function MapExplorer() {
       hotelMarkersRef.current.push(m)
     })
   }, [trip.hotels, geocodedHotels])
+
+  // If navigated here with a hotelId, fly to that hotel once coords are ready
+  useEffect(() => {
+    const hotelId = (routerLocation.state as any)?.hotelId
+    if (!hotelId || !mapRef.current) return
+    const hotel = trip.hotels.find(h => h.id === hotelId)
+    if (!hotel) return
+    const coords = parseMapsUrl(hotel.mapsUrl) ?? geocodedHotels[hotelId]
+    if (!coords) return
+    const loc: Location = { name: hotel.name, lat: coords.lat, lon: coords.lon, country: '' }
+    setSelectedLocation(loc)
+  }, [routerLocation.state, trip.hotels, geocodedHotels])
 
   // Fly to selected location
   useEffect(() => {
