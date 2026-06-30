@@ -141,9 +141,8 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
     setProgress(0)
 
     try {
-      const [Tesseract, { parse }, processedBlob] = await Promise.all([
+      const [Tesseract, processedBlob] = await Promise.all([
         import('tesseract.js').then(m => m.default ?? m),
-        import('mrz'),
         preprocessImage(file),
       ])
 
@@ -163,57 +162,49 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
 
       console.log('[MRZ raw OCR]', text)
 
-      // eng reads OCR-B '<' as space — convert spaces to '<' before stripping.
+      // ── 1. Extract printed biographical dates (DDMMMYYYY) ──────────────────
+      // The biographical page uses regular fonts — eng reads these accurately.
+      // OCR-B in the MRZ strip is mangled; ignore MRZ dates and use these.
+      const MONTH: Record<string, string> = {
+        JAN:'01', FEB:'02', MAR:'03', APR:'04', MAY:'05', JUN:'06',
+        JUL:'07', AUG:'08', SEP:'09', OCT:'10', NOV:'11', DEC:'12',
+      }
+      const upperText = text.toUpperCase()
+      const dateHits = [...upperText.matchAll(/\b(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{4})\b/g)]
+        .map(m => `${m[3]}-${MONTH[m[2]]}-${m[1]}`)
+        .filter((d, i, a) => a.indexOf(d) === i)   // dedupe
+        .sort()
+      const printedDob    = dateHits.find(d => +d.slice(0, 4) < 2010)
+      const printedExpiry = dateHits.find(d => +d.slice(0, 4) >= 2020)
+
+      // ── 2. Find MRZ line 1 (name + nationality) ───────────────────────────
+      // eng reads OCR-B '<' as space — convert spaces before stripping.
       const cleanLine = (l: string) =>
         l.toUpperCase().replace(/ /g, '<').replace(/[^A-Z0-9<]/g, '').trim()
 
       const allCleaned = text.split('\n').map(cleanLine)
 
-      // Line 1: starts with P<, length ≥ 40
       const line1 = allCleaned
         .filter(l => l.startsWith('P<') && l.length >= 40)
         .sort((a, b) => b.length - a.length)[0]
 
-      // Line 2: doesn't start with P<, has 6+ consecutive digits (dates), length ≥ 40
       const line2Raw = allCleaned
         .filter(l => !l.startsWith('P<') && l.length >= 40 && /\d{6}/.test(l))
         .sort((a, b) => b.length - a.length)[0]
 
-      if (!line1) {
-        setError("No MRZ detected. Make sure the full bottom strip (both text lines) is visible and in focus.")
+      if (!line1 && !printedDob) {
+        setError("No passport data detected. Make sure the full data page is visible and in focus.")
         setScanning(false)
         return
       }
 
-      const l1 = line1.padEnd(44, '<').slice(0, 44)
-      const l2 = line2Raw ? fixMrzLine2(line2Raw.padEnd(44, '<').slice(0, 44)) : null
-
-      // Try full 2-line MRZ parse
+      // ── 3. Parse what we can ───────────────────────────────────────────────
       let scanned: ScanResult = {}
-      let isPartial = false
+      let isPartial = true
 
-      try {
-        if (!l2) throw new Error('no line 2')
-        const parsed = parse([l1, l2])
-        const f = parsed.fields
-        const lastName: string = f.lastName ?? ''
-        const firstName: string = f.firstName ?? ''
-        const fullName = [lastName, firstName].filter(Boolean).join(' ').toUpperCase() || undefined
-        const natCode: string = (f.nationality ?? '').toUpperCase()
-        const countryCode: string = (f.issuingState ?? '').toUpperCase()
-        scanned = {
-          ...(fullName && { fullName }),
-          ...(f.documentNumber && { passportNumber: String(f.documentNumber).toUpperCase() }),
-          ...(natCode && { nationality: NAT_MAP[natCode] || natCode }),
-          ...(f.birthDate && { dateOfBirth: mrzDate(String(f.birthDate)) }),
-          ...(f.expirationDate && { expiryDate: mrzDate(String(f.expirationDate)) }),
-          ...(f.sex === 'M' || f.sex === 'F' ? { gender: f.sex } : {}),
-          ...(countryCode && { issuingCountry: COUNTRY_MAP[countryCode] || countryCode }),
-          ...((f as any).documentType && { passportType: String((f as any).documentType).charAt(0).toUpperCase() }),
-        }
-      } catch {
-        // Full parse failed — extract what we can from line 1 alone
-        isPartial = true
+      // Name + nationality always from line 1
+      if (line1) {
+        const l1 = line1.padEnd(44, '<').slice(0, 44)
         const issuingState = l1.slice(2, 5).replace(/<+$/g, '')
         const namePart = l1.slice(5, 44)
         const [lastRaw, ...givenParts] = namePart.split('<<')
@@ -226,10 +217,34 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
           ...(issuingState && { nationality: NAT_MAP[issuingState] || issuingState }),
           ...(issuingState && { issuingCountry: COUNTRY_MAP[issuingState] || issuingState }),
         }
+
+        // Try full 2-line MRZ parse for doc number + sex (still worth a shot)
+        if (line2Raw) {
+          try {
+            const l2 = fixMrzLine2(line2Raw.padEnd(44, '<').slice(0, 44))
+            const { parse: p } = await import('mrz')
+            const parsed = p([l1, l2])
+            const f = parsed.fields
+            if (f.documentNumber) scanned.passportNumber = String(f.documentNumber).toUpperCase()
+            if (f.sex === 'M' || f.sex === 'F') scanned.gender = f.sex
+            isPartial = false
+          } catch { /* keep partial */ }
+        }
       }
 
+      // Prefer printed biographical dates over MRZ OCR-B dates (more accurate)
+      if (printedDob)    scanned.dateOfBirth = printedDob
+      if (printedExpiry) scanned.expiryDate  = printedExpiry
+
       setResult(scanned)
-      setPartialNote(isPartial ? 'Partial scan — name and nationality were read. Enter passport number, dates and sex manually.' : null)
+      const hasDates = !!(scanned.dateOfBirth || scanned.expiryDate)
+      setPartialNote(
+        isPartial
+          ? hasDates
+            ? 'Partial scan — name, nationality and dates were read. Enter passport number and sex manually.'
+            : 'Partial scan — name and nationality were read. Enter remaining fields manually.'
+          : null
+      )
     } catch (err) {
       console.error('Passport scan error:', err)
       setError('Scan failed. Check your internet connection and try again.')
