@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import L from 'leaflet'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
@@ -11,7 +11,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   UtensilsCrossed, ShoppingBag, Camera, Gift,
   Bus, Pill, Loader2, Navigation, X, Clock, Footprints,
-  Bookmark, BookmarkCheck, Star, LocateFixed, MapPin
+  Bookmark, BookmarkCheck, Star, LocateFixed, MapPin, ArrowLeft, Search
 } from 'lucide-react'
 import NavigationBanner from '@/components/map/NavigationBanner'
 import SavePlaceSheet from '@/components/map/SavePlaceSheet'
@@ -260,6 +260,7 @@ export default function MapExplorer() {
   const { trip } = useTrip()
   const { user } = useAuth()
   const routerLocation = useLocation()
+  const navigate = useNavigate()
   const mapRef = useRef<L.Map | null>(null)
   const mapElRef = useRef<HTMLDivElement>(null)
   const markersRef = useRef<L.Layer[]>([])
@@ -347,6 +348,34 @@ export default function MapExplorer() {
   const [currentStepIdx, setCurrentStepIdx] = useState(0)
   const [distToNext, setDistToNext] = useState<number | null>(null)
   const [showNextTurns, setShowNextTurns] = useState(false)
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+
+  const handleSearch = async () => {
+    const q = searchQuery.trim()
+    if (!q) return
+    setSearchLoading(true)
+    setSearchError(null)
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`, {
+        headers: { 'Accept-Language': 'en', 'User-Agent': 'Travelfy/1.0' },
+      })
+      const data = await res.json()
+      if (!data.length) { setSearchError('No results found'); return }
+      const { lat, lon, display_name } = data[0]
+      const loc: Location = { name: display_name.split(',')[0], lat: Number(lat), lon: Number(lon), country: '' }
+      setSelectedLocation(loc)
+      setShowLocationPicker(false)
+      setSearchQuery('')
+    } catch {
+      setSearchError('Search failed')
+    } finally {
+      setSearchLoading(false)
+    }
+  }
 
   // Save & Rate state
   const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([])
@@ -459,16 +488,42 @@ export default function MapExplorer() {
     })
   }, [trip.hotels, geocodedHotels])
 
-  // If navigated here with a hotelId, fly to that hotel once coords are ready
+  // If navigated here with a hotelId, fly to that hotel once coords are ready.
+  // Eagerly geocodes the target hotel so we don't wait for the bulk geocode loop.
   useEffect(() => {
     const hotelId = (routerLocation.state as any)?.hotelId
-    if (!hotelId || !mapRef.current) return
+    if (!hotelId) return
     const hotel = trip.hotels.find(h => h.id === hotelId)
     if (!hotel) return
+
     const coords = parseMapsUrl(hotel.mapsUrl) ?? geocodedHotels[hotelId]
-    if (!coords) return
-    const loc: Location = { name: hotel.name, lat: coords.lat, lon: coords.lon, country: '' }
-    setSelectedLocation(loc)
+    if (coords) {
+      const loc: Location = { name: hotel.name, lat: coords.lat, lon: coords.lon, country: '' }
+      setSelectedLocation(loc)
+      setShowLocationPicker(false)
+      return
+    }
+
+    // Coords not ready yet — geocode eagerly
+    const candidates = [
+      [hotel.name, hotel.address].filter(Boolean).join(', '),
+      [hotel.name, trip.tripInfo.destination].filter(Boolean).join(', '),
+      hotel.address,
+      hotel.name,
+    ].filter((q): q is string => !!q && q.trim().length > 0)
+
+    let cancelled = false;
+    (async () => {
+      for (const query of candidates) {
+        const result = await geocodeAddress(query)
+        if (cancelled) return
+        if (result) {
+          setGeocodedHotels(prev => ({ ...prev, [hotelId]: result }))
+          return
+        }
+      }
+    })()
+    return () => { cancelled = true }
   }, [routerLocation.state, trip.hotels, geocodedHotels])
 
   // Fly to selected location
@@ -780,6 +835,16 @@ export default function MapExplorer() {
       {/* ── Floating Top Bar ── */}
       {!navMode && (
         <div className="absolute top-3 left-3 right-3 z-[1010]">
+          {/* Back button — shown when arriving from Hotels */}
+          {(routerLocation.state as any)?.hotelId && (
+            <button
+              onClick={() => navigate('/hotels')}
+              className="mb-2 flex items-center gap-1.5 px-3 py-2 bg-background/90 backdrop-blur-xl border border-border/60 rounded-2xl shadow-lg text-sm font-medium active:scale-95 transition-transform"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Hotels
+            </button>
+          )}
           <div className="flex gap-2">
             {/* Location pill */}
             <button
@@ -828,6 +893,27 @@ export default function MapExplorer() {
                 transition={{ duration: 0.15 }}
                 className="mt-2 bg-background border border-border rounded-2xl shadow-2xl overflow-hidden"
               >
+                {/* Search input */}
+                <div className="p-3 border-b border-border">
+                  <div className="flex items-center gap-2 bg-muted rounded-xl px-3 py-2">
+                    <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="Search any location…"
+                      value={searchQuery}
+                      onChange={e => { setSearchQuery(e.target.value); setSearchError(null) }}
+                      onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                      className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                    />
+                    {searchLoading
+                      ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />
+                      : searchQuery
+                        ? <button onClick={handleSearch} className="text-primary text-xs font-semibold shrink-0">Go</button>
+                        : null
+                    }
+                  </div>
+                  {searchError && <p className="text-xs text-destructive mt-1.5 px-1">{searchError}</p>}
+                </div>
                 {locations.map(loc => {
                   const isHotel = trip.hotels.some(h => h.name === loc.name)
                   const isGps = loc.name === userLocName || loc.name === 'My Location'
