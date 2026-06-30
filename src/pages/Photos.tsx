@@ -11,7 +11,7 @@ import { useTrip } from '@/contexts/TripContext'
 import {
   Camera, Plus, X, Trash2, MapPin, Tag, ChevronLeft,
   ChevronRight, Loader2, Image, Download, Layers, Star, StarOff,
-  FileText
+  FileText, Pencil, Check
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { compressImage } from '@/utils/image'
@@ -131,6 +131,21 @@ export default function Photos() {
 
   // Progress bar
   const { progress, setProgress } = useUploadProgress(uploading)
+
+  // Edit sheet state
+  const [showEditSheet, setShowEditSheet] = useState(false)
+  const [editCaption, setEditCaption] = useState('')
+  const [editLocationTag, setEditLocationTag] = useState('')
+  const [editDayId, setEditDayId] = useState('')
+  const [editActivityId, setEditActivityId] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editSaved, setEditSaved] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
+  // Nominatim suggestions for edit sheet
+  const [editLocationSuggestions, setEditLocationSuggestions] = useState<NominatimResult[]>([])
+  const [showEditSuggestions, setShowEditSuggestions] = useState(false)
+  const editNominatimTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Mini Leaflet map init / update ───────────────────────────
   useEffect(() => {
@@ -384,6 +399,69 @@ export default function Photos() {
       setUploadError(`Upload failed: ${msg}`)
       setUploading(false)
     }
+  }
+
+  // ── Edit photo metadata ──────────────────────────────────────
+  const openEditSheet = (photo: TripPhoto) => {
+    setEditCaption(photo.caption || '')
+    setEditLocationTag(photo.location_tag || '')
+    // Try to reverse-parse the activity_tag back to day/activity IDs
+    setEditDayId('')
+    setEditActivityId('')
+    setEditError(null)
+    setEditSaved(false)
+    setShowEditSheet(true)
+  }
+
+  const onEditLocationInput = (val: string) => {
+    setEditLocationTag(val)
+    setShowEditSuggestions(false)
+    if (editNominatimTimer.current) clearTimeout(editNominatimTimer.current)
+    if (val.trim().length < 2) { setEditLocationSuggestions([]); return }
+    editNominatimTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(val)}&limit=5&accept-language=en`
+        )
+        const data: NominatimResult[] = await res.json()
+        setEditLocationSuggestions(data)
+        setShowEditSuggestions(data.length > 0)
+      } catch { /* ignore */ }
+    }, 400)
+  }
+
+  const pickEditSuggestion = (s: NominatimResult) => {
+    setEditLocationTag(s.display_name.split(',')[0])
+    setShowEditSuggestions(false)
+    setEditLocationSuggestions([])
+  }
+
+  const saveEdit = async () => {
+    if (!lightboxPhoto) return
+    setEditSaving(true)
+    setEditError(null)
+
+    const selectedDay = trip.itinerary.find(d => d.id === editDayId)
+    const selectedActivity = selectedDay?.activities.find(a => a.id === editActivityId)
+    const activityLabel = selectedDay
+      ? `Day ${selectedDay.dayNumber} – ${selectedDay.title}${selectedActivity ? ` · ${selectedActivity.title}` : ''}`
+      : lightboxPhoto.activity_tag // keep existing if no day selected
+
+    const { error } = await supabase.from('trip_photos').update({
+      caption: editCaption,
+      location_tag: editLocationTag,
+      activity_tag: editDayId ? activityLabel : editActivityId === '' && editDayId === '' ? '' : lightboxPhoto.activity_tag,
+    }).eq('id', lightboxPhoto.id)
+
+    setEditSaving(false)
+    if (error) { setEditError(error.message); return }
+
+    setPhotos(prev => prev.map(p => p.id === lightboxPhoto.id
+      ? { ...p, caption: editCaption, location_tag: editLocationTag, activity_tag: editDayId ? activityLabel : p.activity_tag }
+      : p
+    ))
+    setEditSaved(true)
+    setTimeout(() => { setEditSaved(false); setShowEditSheet(false) }, 800)
   }
 
   // ── Delete photo ─────────────────────────────────────────────
@@ -834,6 +912,140 @@ export default function Photos() {
         )}
       </AnimatePresence>
 
+      {/* Edit Sheet */}
+      <AnimatePresence>
+        {showEditSheet && lightboxPhoto && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] bg-black/70"
+              onClick={() => { if (!editSaving) setShowEditSheet(false) }}
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28 }}
+              className="fixed bottom-0 left-0 right-0 z-[61] bg-background rounded-t-3xl shadow-2xl max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between px-5 pt-5 pb-3">
+                <h2 className="text-lg font-bold">Edit Photo</h2>
+                <button
+                  onClick={() => { if (!editSaving) setShowEditSheet(false) }}
+                  disabled={editSaving}
+                  className="w-8 h-8 rounded-full bg-muted flex items-center justify-center disabled:opacity-40"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="px-5 pb-8 space-y-4">
+                {/* Caption */}
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    {lightboxPhoto.public_url ? 'Caption' : 'Note / Memory'}
+                  </label>
+                  <input
+                    value={editCaption}
+                    onChange={e => setEditCaption(e.target.value)}
+                    placeholder="Describe this moment…"
+                    className="mt-1.5 w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                </div>
+
+                {/* Location */}
+                <div className="relative">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                    <MapPin className="h-3 w-3" /> Location
+                  </label>
+                  <input
+                    value={editLocationTag}
+                    onChange={e => onEditLocationInput(e.target.value)}
+                    onBlur={() => setTimeout(() => setShowEditSuggestions(false), 200)}
+                    onFocus={() => editLocationSuggestions.length > 0 && setShowEditSuggestions(true)}
+                    placeholder="e.g. Hotel Guia, Macau…"
+                    className="mt-1.5 w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  />
+                  <AnimatePresence>
+                    {showEditSuggestions && editLocationSuggestions.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        className="absolute left-0 right-0 top-full mt-1 z-10 bg-background border border-border rounded-xl shadow-xl overflow-hidden"
+                      >
+                        {editLocationSuggestions.map(s => (
+                          <button
+                            key={s.place_id}
+                            onMouseDown={() => pickEditSuggestion(s)}
+                            className="w-full px-4 py-2.5 text-left text-sm hover:bg-muted transition-colors flex flex-col gap-0.5"
+                          >
+                            <span className="font-medium truncate">{s.display_name.split(',')[0]}</span>
+                            <span className="text-xs text-muted-foreground truncate">
+                              {s.display_name.split(',').slice(1, 3).join(',')}
+                            </span>
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Itinerary Tag */}
+                <div>
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                    <Tag className="h-3 w-3" /> Link to Itinerary
+                  </label>
+                  {lightboxPhoto.activity_tag && !editDayId && (
+                    <p className="mt-1 text-xs text-muted-foreground">Current: <span className="text-foreground">{lightboxPhoto.activity_tag}</span></p>
+                  )}
+                  <div className="mt-1.5 flex flex-col gap-2">
+                    <select
+                      value={editDayId}
+                      onChange={e => { setEditDayId(e.target.value); setEditActivityId('') }}
+                      className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                    >
+                      <option value="">— Keep existing / Select Day —</option>
+                      {trip.itinerary.map(d => (
+                        <option key={d.id} value={d.id}>Day {d.dayNumber} – {d.title}</option>
+                      ))}
+                    </select>
+                    {editDayId && (
+                      <select
+                        value={editActivityId}
+                        onChange={e => setEditActivityId(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                      >
+                        <option value="">— Select Activity (optional) —</option>
+                        {(trip.itinerary.find(d => d.id === editDayId)?.activities || []).map(a => (
+                          <option key={a.id} value={a.id}>{a.time} – {a.title}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+
+                {editError && (
+                  <div className="px-3 py-2 rounded-xl bg-destructive/10 text-destructive text-xs">{editError}</div>
+                )}
+
+                <button
+                  onClick={saveEdit}
+                  disabled={editSaving || editSaved}
+                  className="w-full py-4 rounded-2xl gradient-brand text-white font-bold text-sm shadow-lg flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  {editSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : editSaved ? <Check className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+                  {editSaved ? 'Saved!' : editSaving ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Lightbox */}
       <AnimatePresence>
         {lightboxPhoto && lightboxIndex !== null && (
@@ -859,6 +1071,13 @@ export default function Photos() {
                   ? <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
                   : <StarOff className="h-4 w-4 text-white" />
                 }
+              </button>
+              <button
+                onClick={() => openEditSheet(lightboxPhoto)}
+                aria-label="Edit photo details"
+                className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center shrink-0"
+              >
+                <Pencil className="h-4 w-4 text-white" />
               </button>
               <button
                 onClick={() => deletePhoto(lightboxPhoto)}
