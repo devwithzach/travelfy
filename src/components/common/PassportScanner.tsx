@@ -66,6 +66,7 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<ScanResult | null>(null)
+  const [partialNote, setPartialNote] = useState<string | null>(null)
 
   const reset = () => {
     setPreview(null)
@@ -73,6 +74,7 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
     setProgress(0)
     setError(null)
     setResult(null)
+    setPartialNote(null)
   }
 
   const handleClose = () => { reset(); onClose() }
@@ -162,83 +164,72 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
       console.log('[MRZ raw OCR]', text)
 
       // eng reads OCR-B '<' as space — convert spaces to '<' before stripping.
-      // MRZ lines: ≥40 chars, ≥5 '<' fillers, starts with 'P<' (line1) or has 6+ consecutive digits (line2).
-      const candidates = text
-        .split('\n')
-        .map((l: string) =>
-          l.toUpperCase()
-            .replace(/ /g, '<')
-            .replace(/[^A-Z0-9<]/g, '')
-            .trim()
-        )
-        .filter((l: string) => {
-          if (l.length < 40) return false
-          const angles = (l.match(/</g) ?? []).length
-          if (angles < 5) return false
-          return l.startsWith('P<') || /\d{6}/.test(l)
-        })
-        .sort((a: string, b: string) => {
-          const aScore = (a.startsWith('P<') ? 20 : 0) + (a.match(/</g) ?? []).length
-          const bScore = (b.startsWith('P<') ? 20 : 0) + (b.match(/</g) ?? []).length
-          return bScore - aScore
-        })
+      const cleanLine = (l: string) =>
+        l.toUpperCase().replace(/ /g, '<').replace(/[^A-Z0-9<]/g, '').trim()
 
-      if (candidates.length < 2) {
+      const allCleaned = text.split('\n').map(cleanLine)
+
+      // Line 1: starts with P<, length ≥ 40
+      const line1 = allCleaned
+        .filter(l => l.startsWith('P<') && l.length >= 40)
+        .sort((a, b) => b.length - a.length)[0]
+
+      // Line 2: doesn't start with P<, has 6+ consecutive digits (dates), length ≥ 40
+      const line2Raw = allCleaned
+        .filter(l => !l.startsWith('P<') && l.length >= 40 && /\d{6}/.test(l))
+        .sort((a, b) => b.length - a.length)[0]
+
+      if (!line1) {
         setError("No MRZ detected. Make sure the full bottom strip (both text lines) is visible and in focus.")
         setScanning(false)
         return
       }
 
-      // Apply digit-position correction and try every consecutive pair
-      let mrzLines: string[] = []
-      const all = candidates.map((l: string, idx: number) => {
-        const padded = l.padEnd(44, '<').slice(0, 44)
-        // Line 2 starts with the doc number (alphanumeric), not 'P<'
-        return !padded.startsWith('P<') ? fixMrzLine2(padded) : padded
-      })
+      const l1 = line1.padEnd(44, '<').slice(0, 44)
+      const l2 = line2Raw ? fixMrzLine2(line2Raw.padEnd(44, '<').slice(0, 44)) : null
 
-      for (let i = 0; i < all.length - 1; i++) {
-        try {
-          parse([all[i], all[i + 1]])
-          mrzLines = [all[i], all[i + 1]]
-          break
-        } catch { /* next */ }
-      }
-      // Fallback: first two longest
-      if (!mrzLines.length) {
-        mrzLines = all.slice(0, 2)
-      }
+      // Try full 2-line MRZ parse
+      let scanned: ScanResult = {}
+      let isPartial = false
 
-      let parsed: any
       try {
-        const { parse: p } = await import('mrz')
-        parsed = p(mrzLines)
-      } catch (e) {
-        setError("Couldn't read the MRZ. Try a clearer, well-lit photo — avoid glare on the passport.")
-        setScanning(false)
-        return
-      }
-
-      const f = parsed.fields
-      const lastName: string = f.lastName ?? ''
-      const firstName: string = f.firstName ?? ''
-      const fullName = [lastName, firstName].filter(Boolean).join(' ').toUpperCase() || undefined
-
-      const natCode: string = (f.nationality ?? '').toUpperCase()
-      const countryCode: string = (f.issuingState ?? '').toUpperCase()
-
-      const scanned: ScanResult = {
-        ...(fullName && { fullName }),
-        ...(f.documentNumber && { passportNumber: String(f.documentNumber).toUpperCase() }),
-        ...(natCode && { nationality: NAT_MAP[natCode] || natCode }),
-        ...(f.birthDate && { dateOfBirth: mrzDate(String(f.birthDate)) }),
-        ...(f.expirationDate && { expiryDate: mrzDate(String(f.expirationDate)) }),
-        ...(f.sex === 'M' || f.sex === 'F' ? { gender: f.sex } : {}),
-        ...(countryCode && { issuingCountry: COUNTRY_MAP[countryCode] || countryCode }),
-        ...(f.documentType && { passportType: String(f.documentType).charAt(0).toUpperCase() }),
+        if (!l2) throw new Error('no line 2')
+        const parsed = parse([l1, l2])
+        const f = parsed.fields
+        const lastName: string = f.lastName ?? ''
+        const firstName: string = f.firstName ?? ''
+        const fullName = [lastName, firstName].filter(Boolean).join(' ').toUpperCase() || undefined
+        const natCode: string = (f.nationality ?? '').toUpperCase()
+        const countryCode: string = (f.issuingState ?? '').toUpperCase()
+        scanned = {
+          ...(fullName && { fullName }),
+          ...(f.documentNumber && { passportNumber: String(f.documentNumber).toUpperCase() }),
+          ...(natCode && { nationality: NAT_MAP[natCode] || natCode }),
+          ...(f.birthDate && { dateOfBirth: mrzDate(String(f.birthDate)) }),
+          ...(f.expirationDate && { expiryDate: mrzDate(String(f.expirationDate)) }),
+          ...(f.sex === 'M' || f.sex === 'F' ? { gender: f.sex } : {}),
+          ...(countryCode && { issuingCountry: COUNTRY_MAP[countryCode] || countryCode }),
+          ...((f as any).documentType && { passportType: String((f as any).documentType).charAt(0).toUpperCase() }),
+        }
+      } catch {
+        // Full parse failed — extract what we can from line 1 alone
+        isPartial = true
+        const issuingState = l1.slice(2, 5).replace(/<+$/g, '')
+        const namePart = l1.slice(5, 44)
+        const [lastRaw, ...givenParts] = namePart.split('<<')
+        const lastName = lastRaw.replace(/</g, ' ').trim()
+        const firstName = givenParts.join(' ').replace(/</g, ' ').trim()
+        const fullName = [lastName, firstName].filter(Boolean).join(' ') || undefined
+        scanned = {
+          ...(fullName && { fullName }),
+          passportType: 'P',
+          ...(issuingState && { nationality: NAT_MAP[issuingState] || issuingState }),
+          ...(issuingState && { issuingCountry: COUNTRY_MAP[issuingState] || issuingState }),
+        }
       }
 
       setResult(scanned)
+      setPartialNote(isPartial ? 'Partial scan — name and nationality were read. Enter passport number, dates and sex manually.' : null)
     } catch (err) {
       console.error('Passport scan error:', err)
       setError('Scan failed. Check your internet connection and try again.')
@@ -458,9 +449,16 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
                     </div>
                   </div>
 
-                  <p className="text-xs text-center text-muted-foreground px-2">
-                    OCR isn't perfect — double-check the fields above before saving.
-                  </p>
+                  {partialNote ? (
+                    <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                      <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                      <p className="text-xs text-amber-700 dark:text-amber-400">{partialNote}</p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-center text-muted-foreground px-2">
+                      OCR isn't perfect — double-check the fields above before saving.
+                    </p>
+                  )}
 
                   <div className="flex gap-3">
                     <button
