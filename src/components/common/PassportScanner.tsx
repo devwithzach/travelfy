@@ -80,8 +80,7 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
   const handleClose = () => { reset(); onClose() }
   const handleApply = () => { if (result) { onApply(result); reset(); onClose() } }
 
-  // Scale the full image 2× and boost contrast so Tesseract reads OCR-B.
-  // We do NOT crop here — let the MRZ line filter find the strip wherever it lands.
+  // Full image at 2× scale + contrast for the first OCR pass.
   const preprocessImage = (file: File): Promise<Blob> =>
     new Promise((resolve, reject) => {
       const img = new Image()
@@ -92,8 +91,6 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
         canvas.height = img.height * scale
         const ctx = canvas.getContext('2d')!
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-
-        // Grayscale + contrast boost (LSTM prefers grayscale over pure B&W)
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
         const d = imageData.data
         for (let i = 0; i < d.length; i += 4) {
@@ -102,7 +99,40 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
           d[i] = d[i + 1] = d[i + 2] = contrast
         }
         ctx.putImageData(imageData, 0, 0)
-        canvas.toBlob(b => b ? resolve(b) : reject(new Error('canvas toBlob failed')), 'image/png')
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png')
+      }
+      img.onerror = reject
+      img.src = URL.createObjectURL(file)
+    })
+
+  // Crop to MRZ line 2 area (just below line 1 bbox) at 4× scale for the targeted second pass.
+  const cropMrzLine2 = (file: File, line1Bbox: {y0:number, y1:number}, preprocessScale: number): Promise<Blob> =>
+    new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => {
+        const origY1 = line1Bbox.y1 / preprocessScale
+        const lineH  = (line1Bbox.y1 - line1Bbox.y0) / preprocessScale
+        // Slightly overlap line 1 bottom, capture one line-height below
+        const cropY = Math.max(0, origY1 - lineH * 0.15)
+        const cropH = Math.min(lineH * 1.6, img.height - cropY)
+
+        const scale = 4
+        const canvas = document.createElement('canvas')
+        canvas.width  = img.width * scale
+        canvas.height = cropH * scale
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(img, 0, cropY, img.width, cropH, 0, 0, canvas.width, canvas.height)
+
+        // High contrast for OCR-B
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const d = imageData.data
+        for (let i = 0; i < d.length; i += 4) {
+          const gray = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2])
+          const contrast = Math.min(255, Math.max(0, ((gray - 128) * 3) + 128))
+          d[i] = d[i + 1] = d[i + 2] = contrast
+        }
+        ctx.putImageData(imageData, 0, 0)
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error('crop toBlob failed')), 'image/png')
       }
       img.onerror = reject
       img.src = URL.createObjectURL(file)
@@ -158,7 +188,7 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
         tessedit_pageseg_mode: '11' as any,
       })
 
-      const { data: { text } } = await worker.recognize(processedBlob)
+      const { data: { text, lines: tessLines } } = await worker.recognize(processedBlob) as any
       await worker.terminate()
 
       console.log('[MRZ raw OCR]', text)
@@ -194,12 +224,12 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
       const allCleaned = text.split('\n').map(cleanLine)
 
       const line1 = allCleaned
-        .filter(l => l.startsWith('P<') && l.length >= 40)
-        .sort((a, b) => b.length - a.length)[0]
+        .filter((l: string) => l.startsWith('P<') && l.length >= 40)
+        .sort((a: string, b: string) => b.length - a.length)[0]
 
       const line2Raw = allCleaned
-        .filter(l => !l.startsWith('P<') && l.length >= 40 && /\d{6}/.test(l))
-        .sort((a, b) => b.length - a.length)[0]
+        .filter((l: string) => !l.startsWith('P<') && l.length >= 40 && /\d{6}/.test(l))
+        .sort((a: string, b: string) => b.length - a.length)[0]
 
       if (!line1 && !printedDob) {
         setError("No passport data detected. Make sure the full data page is visible and in focus.")
@@ -227,10 +257,38 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
           ...(issuingState && { issuingCountry: COUNTRY_MAP[issuingState] || issuingState }),
         }
 
-        // Try full 2-line MRZ parse for doc number + sex (still worth a shot)
-        if (line2Raw) {
+        // ── Targeted second pass: crop+4× zoom to MRZ line 2 ─────────────────
+        // Find line 1 bbox in Tesseract output, then crop to the row below it.
+        const line1Bbox = (tessLines as any[])?.find((tl: any) => {
+          const t = cleanLine(tl.text ?? '')
+          return t.startsWith('P<') && t.length >= 40
+        })?.bbox as {y0:number, y1:number} | undefined
+
+        let targetedLine2: string | null = null
+        if (line1Bbox) {
           try {
-            const l2 = fixMrzLine2(line2Raw.padEnd(44, '<').slice(0, 44))
+            const line2Crop = await cropMrzLine2(file, line1Bbox, 2)
+            const w2 = await Tesseract.createWorker('eng', 1, {})
+            await w2.setParameters({
+              tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
+              tessedit_pageseg_mode: '7' as any,  // single text line
+            })
+            const { data: { text: l2t } } = await w2.recognize(line2Crop)
+            await w2.terminate()
+            targetedLine2 = cleanLine(l2t)
+            console.log('[MRZ line2 targeted]', targetedLine2)
+          } catch { /* ignore second pass errors */ }
+        }
+
+        // Use targeted line 2 if it looks like MRZ, otherwise fall back to first-pass line2Raw
+        const bestLine2 = (targetedLine2 && targetedLine2.length >= 40 && /\d{6}/.test(targetedLine2))
+          ? targetedLine2
+          : line2Raw
+
+        // Try full 2-line MRZ parse for doc number + sex
+        if (bestLine2) {
+          try {
+            const l2 = fixMrzLine2(bestLine2.padEnd(44, '<').slice(0, 44))
             const { parse: p } = await import('mrz')
             const parsed = p([l1, l2])
             const f = parsed.fields
