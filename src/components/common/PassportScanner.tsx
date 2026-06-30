@@ -78,27 +78,25 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
   const handleClose = () => { reset(); onClose() }
   const handleApply = () => { if (result) { onApply(result); reset(); onClose() } }
 
-  // Crop the bottom 15% of the image (MRZ strip zone), scale 3×,
-  // convert to high-contrast grayscale so Tesseract reads OCR-B correctly.
+  // Scale the full image 2× and boost contrast so Tesseract reads OCR-B.
+  // We do NOT crop here — let the MRZ line filter find the strip wherever it lands.
   const preprocessImage = (file: File): Promise<Blob> =>
     new Promise((resolve, reject) => {
       const img = new Image()
       img.onload = () => {
-        const cropTop = Math.floor(img.height * 0.82) // bottom 18% = MRZ strip + margin
-        const cropH = img.height - cropTop
-        const scale = 4 // more pixels → better OCR
+        const scale = 2
         const canvas = document.createElement('canvas')
         canvas.width = img.width * scale
-        canvas.height = cropH * scale
+        canvas.height = img.height * scale
         const ctx = canvas.getContext('2d')!
-        ctx.drawImage(img, 0, cropTop, img.width, cropH, 0, 0, canvas.width, canvas.height)
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
 
-        // Grayscale + aggressive contrast
+        // Grayscale + contrast boost (LSTM prefers grayscale over pure B&W)
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
         const d = imageData.data
         for (let i = 0; i < d.length; i += 4) {
           const gray = Math.round(0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2])
-          const contrast = gray > 128 ? 255 : 0 // hard threshold = pure B&W
+          const contrast = Math.min(255, Math.max(0, ((gray - 128) * 2) + 128))
           d[i] = d[i + 1] = d[i + 2] = contrast
         }
         ctx.putImageData(imageData, 0, 0)
@@ -155,7 +153,7 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
 
       await worker.setParameters({
         tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<',
-        tessedit_pageseg_mode: '6' as any,
+        tessedit_pageseg_mode: '11' as any,
       })
 
       const { data: { text } } = await worker.recognize(processedBlob)
@@ -165,11 +163,12 @@ export default function PassportScanner({ open, onClose, onApply }: Props) {
       const candidates = text
         .split('\n')
         .map((l: string) => l.toUpperCase().replace(/[^A-Z0-9<]/g, '').trim())
-        .filter((l: string) => l.length >= 30)
-        // MRZ line 1 starts with P< for passports — prioritise those
+        // MRZ lines: 40+ chars and at least 5 '<' filler chars
+        // (regular printed passport text has no '<' at all)
+        .filter((l: string) => l.length >= 40 && (l.match(/</g) ?? []).length >= 5)
         .sort((a: string, b: string) => {
-          const aScore = (a.startsWith('P<') ? 10 : 0) + a.length
-          const bScore = (b.startsWith('P<') ? 10 : 0) + b.length
+          const aScore = (a.startsWith('P<') ? 20 : 0) + (a.match(/</g) ?? []).length
+          const bScore = (b.startsWith('P<') ? 20 : 0) + (b.match(/</g) ?? []).length
           return bScore - aScore
         })
 
