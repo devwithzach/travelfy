@@ -230,6 +230,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       restrictions: [...source.restrictions],
       flights: [], // flight numbers/dates rarely repeat
       ferries: [],
+      buses: [],
       hotels: source.hotels.map(h => ({
         ...h,
         id: crypto.randomUUID(),

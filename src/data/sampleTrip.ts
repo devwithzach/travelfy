@@ -60,6 +60,9 @@ export const sampleTrip: TripData = {
     },
   ],
 
+  ferries: [],
+  buses: [],
+
   hotels: [
     {
       id: 'ht-001',

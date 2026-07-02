@@ -683,10 +683,11 @@ export default function Timeline() {
 
               {/* Form */}
               {editingDay && (
-                <div className="px-5 pb-8 space-y-3">
+                <div className="px-5 pb-8 space-y-4">
+                  {/* Day # + Date */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground uppercase tracking-wide">Day Number</Label>
+                      <Label className="text-xs text-muted-foreground uppercase tracking-wide">Day #</Label>
                       <input
                         type="number"
                         value={editingDay.dayNumber}
@@ -705,49 +706,83 @@ export default function Timeline() {
                       />
                     </div>
                   </div>
+
+                  {/* Title */}
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground uppercase tracking-wide">Title</Label>
                     <input
                       type="text"
                       value={editingDay.title}
                       onChange={e => setEditingDay({ ...editingDay, title: e.target.value })}
-                      placeholder="Manila → Hong Kong"
+                      placeholder="e.g. Manila → Cebu, Arrival Day"
                       className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                     />
                   </div>
+
+                  {/* Divider */}
+                  <div className="flex items-center gap-3">
+                    <div className="h-px flex-1 bg-border" />
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Optional</span>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+
+                  {/* Subtitle */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Subtitle</Label>
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Subtitle / Theme</Label>
                     <input
                       type="text"
                       value={editingDay.subtitle}
                       onChange={e => setEditingDay({ ...editingDay, subtitle: e.target.value })}
-                      placeholder="Arrival Day"
+                      placeholder="e.g. Beach Day, City Tour"
                       className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                     />
                   </div>
+
+                  {/* Hotel */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Hotel</Label>
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">🏨 Accommodation</Label>
                     <input
                       type="text"
                       value={editingDay.hotel}
                       onChange={e => setEditingDay({ ...editingDay, hotel: e.target.value })}
-                      placeholder="Dorsett Kwun Tong"
+                      placeholder="Hotel or hostel name"
                       className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Meals (comma-separated)</Label>
-                    <input
-                      type="text"
-                      value={editingDay.meals.join(', ')}
-                      onChange={e => setEditingDay({ ...editingDay, meals: e.target.value.split(',').map(m => m.trim()).filter(Boolean) })}
-                      placeholder="Breakfast, Lunch"
-                      className="w-full px-4 py-3 rounded-xl bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                    />
+
+                  {/* Meals — toggle chips instead of comma input */}
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">🍽️ Meals included</Label>
+                    <div className="flex gap-2 flex-wrap">
+                      {['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Packed Meal'].map(meal => {
+                        const active = editingDay.meals.includes(meal)
+                        return (
+                          <button
+                            key={meal}
+                            type="button"
+                            onClick={() => setEditingDay(d => d ? ({
+                              ...d,
+                              meals: active
+                                ? d.meals.filter(m => m !== meal)
+                                : [...d.meals, meal],
+                            }) : d)}
+                            className={cn(
+                              'px-3 py-2 rounded-xl text-xs font-semibold border transition-all active:scale-95',
+                              active
+                                ? 'bg-amber-500 border-amber-500 text-white'
+                                : 'bg-muted border-border text-muted-foreground hover:border-amber-400 hover:text-foreground',
+                            )}
+                          >
+                            {meal}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
+
                   <button
                     onClick={saveDay}
-                    className="w-full py-4 rounded-2xl gradient-brand text-white font-bold text-sm mt-2 active:scale-[0.98] transition-transform"
+                    className="w-full py-4 rounded-2xl gradient-brand text-white font-bold text-sm active:scale-[0.98] transition-transform"
                   >
                     Save Day
                   </button>

@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type {
-  TripData, TripSummary, Flight, Hotel, ItineraryDay, ItineraryActivity,
+  TripData, TripSummary, Flight, Ferry, Bus, Hotel, ItineraryDay, ItineraryActivity,
   ChecklistItem, Expense, Document, EmergencyContact, QuickLink,
   Note, VisaInfo, CurrencyRate
 } from '@/types'
@@ -9,10 +9,36 @@ import {
   flightRowSchema, hotelRowSchema, activityRowSchema, dayRowSchema,
   checklistRowSchema, expenseRowSchema, documentRowSchema, contactRowSchema,
   linkRowSchema, noteRowSchema, visaRowSchema, rateRowSchema, passportRowSchema,
-  tripRowSchema, tripSummaryRowSchema,
+  busRowSchema, ferryRowSchema, tripRowSchema, tripSummaryRowSchema,
 } from './schemas'
 
 // ── Mappers: validated DB row → app type ──────────────────
+
+function mapBus(r: unknown): Bus {
+  const v = busRowSchema.parse(r)
+  return {
+    id: v.id, operator: v.operator, busType: v.bus_type,
+    from: v.from_city, fromTerminal: v.from_terminal,
+    to: v.to_city, toTerminal: v.to_terminal,
+    departureDate: v.departure_date, departureTime: v.departure_time,
+    arrivalDate: v.arrival_date, arrivalTime: v.arrival_time,
+    seatNumber: v.seat_number, bookingReference: v.booking_reference,
+    status: v.status, notes: v.notes,
+  }
+}
+
+function mapFerry(r: unknown): Ferry {
+  const v = ferryRowSchema.parse(r)
+  return {
+    id: v.id, operator: v.operator, vesselName: v.vessel_name,
+    from: v.from_port, fromTerminal: v.from_terminal,
+    to: v.to_port, toTerminal: v.to_terminal,
+    departureDate: v.departure_date, departureTime: v.departure_time,
+    arrivalDate: v.arrival_date, arrivalTime: v.arrival_time,
+    accommodation: v.accommodation, bookingReference: v.booking_reference,
+    ticketNumber: v.ticket_number, status: v.status, notes: v.notes,
+  }
+}
 
 function mapFlight(r: unknown): Flight {
   const v = flightRowSchema.parse(r)
@@ -131,6 +157,8 @@ async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripDa
 
   const [
     { data: flights },
+    { data: ferries },
+    { data: buses },
     { data: hotels },
     { data: days },
     { data: checklist },
@@ -144,6 +172,8 @@ async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripDa
     { data: rates },
   ] = await Promise.all([
     supabase.from('flights').select('*').eq('trip_id', tripId).order('sort_order'),
+    supabase.from('ferries').select('*').eq('trip_id', tripId).order('sort_order'),
+    supabase.from('buses').select('*').eq('trip_id', tripId).order('sort_order'),
     supabase.from('hotels').select('*').eq('trip_id', tripId).order('check_in'),
     supabase.from('itinerary_days').select('*, itinerary_activities(*)').eq('trip_id', tripId).order('day_number'),
     supabase.from('checklist_items').select('*').eq('trip_id', tripId).order('sort_order'),
@@ -180,6 +210,8 @@ async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripDa
     tourNotes: tripRow.tour_notes,
     restrictions: tripRow.restrictions,
     flights: (flights ?? []).map(mapFlight),
+    ferries: (ferries ?? []).map(mapFerry),
+    buses: (buses ?? []).map(mapBus),
     hotels: (hotels ?? []).map(mapHotel),
     itinerary: (days ?? []).map(mapDay),
     checklist: (checklist ?? []).map(mapChecklist),
@@ -363,6 +395,31 @@ export const storageService = {
         arrival_date_offset: f.arrivalDateOffset, seat: f.seat,
         booking_reference: f.bookingReference, gate: f.gate,
         status: f.status, sort_order: i,
+      }))),
+
+      // Ferries
+      syncTable('ferries', tripId, trip.ferries.map((f, i) => ({
+        id: f.id, trip_id: tripId, user_id: userId,
+        operator: f.operator, vessel_name: f.vesselName,
+        from_port: f.from, from_terminal: f.fromTerminal,
+        to_port: f.to, to_terminal: f.toTerminal,
+        departure_date: f.departureDate, departure_time: f.departureTime,
+        arrival_date: f.arrivalDate, arrival_time: f.arrivalTime,
+        accommodation: f.accommodation, booking_reference: f.bookingReference,
+        ticket_number: f.ticketNumber, status: f.status,
+        notes: f.notes, sort_order: i,
+      }))),
+
+      // Buses
+      syncTable('buses', tripId, trip.buses.map((b, i) => ({
+        id: b.id, trip_id: tripId, user_id: userId,
+        operator: b.operator, bus_type: b.busType,
+        from_city: b.from, from_terminal: b.fromTerminal,
+        to_city: b.to, to_terminal: b.toTerminal,
+        departure_date: b.departureDate, departure_time: b.departureTime,
+        arrival_date: b.arrivalDate, arrival_time: b.arrivalTime,
+        seat_number: b.seatNumber, booking_reference: b.bookingReference,
+        status: b.status, notes: b.notes, sort_order: i,
       }))),
 
       // Hotels

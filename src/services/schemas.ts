@@ -10,6 +10,43 @@ const num = (def = 0) => z.number().catch(def)
 const bool = (def = false) => z.boolean().catch(def)
 const strArr = () => z.array(z.string()).catch([])
 
+export const busRowSchema = z.object({
+  id: str(),
+  operator: str(),
+  bus_type: str(),
+  from_city: str(),
+  from_terminal: str(),
+  to_city: str(),
+  to_terminal: str(),
+  departure_date: str(),
+  departure_time: str(),
+  arrival_date: str(),
+  arrival_time: str(),
+  seat_number: str(),
+  booking_reference: str(),
+  status: z.enum(['upcoming', 'boarding', 'in-transit', 'arrived']).catch('upcoming'),
+  notes: str(),
+})
+
+export const ferryRowSchema = z.object({
+  id: str(),
+  operator: str(),
+  vessel_name: str(),
+  from_port: str(),
+  from_terminal: str(),
+  to_port: str(),
+  to_terminal: str(),
+  departure_date: str(),
+  departure_time: str(),
+  arrival_date: str(),
+  arrival_time: str(),
+  accommodation: str(),
+  booking_reference: str(),
+  ticket_number: str(),
+  status: z.enum(['upcoming', 'boarding', 'in-transit', 'arrived']).catch('upcoming'),
+  notes: str(),
+})
+
 export const flightRowSchema = z.object({
   id: str(),
   flight_number: str(),

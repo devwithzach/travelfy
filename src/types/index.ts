@@ -187,9 +187,48 @@ export interface TripInfo {
   tripType: 'international' | 'domestic'
 }
 
+export interface Ferry {
+  id: string
+  operator: string
+  vesselName: string
+  from: string
+  fromTerminal: string
+  to: string
+  toTerminal: string
+  departureDate: string
+  departureTime: string
+  arrivalDate: string
+  arrivalTime: string
+  accommodation: string
+  bookingReference: string
+  ticketNumber: string
+  status: 'upcoming' | 'boarding' | 'in-transit' | 'arrived'
+  notes: string
+}
+
+export interface Bus {
+  id: string
+  operator: string
+  busType: string
+  from: string
+  fromTerminal: string
+  to: string
+  toTerminal: string
+  departureDate: string
+  departureTime: string
+  arrivalDate: string
+  arrivalTime: string
+  seatNumber: string
+  bookingReference: string
+  status: 'upcoming' | 'boarding' | 'in-transit' | 'arrived'
+  notes: string
+}
+
 export interface TripData {
   tripInfo: TripInfo
   flights: Flight[]
+  ferries: Ferry[]
+  buses: Bus[]
   hotels: Hotel[]
   itinerary: ItineraryDay[]
   checklist: ChecklistItem[]
