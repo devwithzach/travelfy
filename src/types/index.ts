@@ -165,6 +165,7 @@ export interface TripSummary {
   endDate: string
   status: 'upcoming' | 'active' | 'completed'
   coverImage: string
+  tripType: 'international' | 'domestic'
   /** Optional per-trip aggregates loaded by listTrips. Zero when unset. */
   counts?: {
     flights: number
@@ -183,6 +184,7 @@ export interface TripInfo {
   coverImage: string
   description: string
   status: 'upcoming' | 'active' | 'completed'
+  tripType: 'international' | 'domestic'
 }
 
 export interface TripData {

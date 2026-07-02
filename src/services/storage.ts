@@ -167,6 +167,7 @@ async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripDa
       coverImage: tripRow.cover_image,
       description: tripRow.description,
       status: tripRow.status,
+      tripType: tripRow.trip_type,
     },
     settings: {
       travelerName: tripRow.traveler_name,
@@ -222,7 +223,7 @@ export const storageService = {
     const { data } = await supabase
       .from('trips')
       .select(`
-        id, name, destination, start_date, end_date, status, cover_image,
+        id, name, destination, start_date, end_date, status, cover_image, trip_type,
         flights(count),
         hotels(count),
         itinerary_days(count),
@@ -249,6 +250,7 @@ export const storageService = {
         endDate: v.end_date,
         status: v.status,
         coverImage: v.cover_image,
+        tripType: v.trip_type,
         counts: {
           flights: getCount(row.flights),
           hotels: getCount(row.hotels),
@@ -284,7 +286,7 @@ export const storageService = {
     return assembleTrip(userId, tripRow)
   },
 
-  async createTrip(userId: string, info: { name: string; destination: string; startDate: string; endDate: string; description: string }): Promise<string> {
+  async createTrip(userId: string, info: { name: string; destination: string; startDate: string; endDate: string; description: string; tripType: 'international' | 'domestic' }): Promise<string> {
     const id = crypto.randomUUID()
     await supabase.from('trips').insert({
       id,
@@ -294,6 +296,7 @@ export const storageService = {
       start_date: info.startDate,
       end_date: info.endDate,
       description: info.description,
+      trip_type: info.tripType,
       status: 'upcoming',
       home_currency: 'PHP',
       language: 'en',
@@ -336,6 +339,7 @@ export const storageService = {
       description: trip.tripInfo.description,
       cover_image: trip.tripInfo.coverImage,
       status: trip.tripInfo.status,
+      trip_type: trip.tripInfo.tripType,
       total_budget: trip.settings.totalBudget,
       home_currency: trip.settings.homeCurrency,
       traveler_name: trip.settings.travelerName,

@@ -11,6 +11,7 @@ export function createEmptyTrip(id = `trip-${Date.now()}`): TripData {
       coverImage: '',
       description: '',
       status: 'upcoming',
+      tripType: 'international',
     },
     flights: [],
     hotels: [],

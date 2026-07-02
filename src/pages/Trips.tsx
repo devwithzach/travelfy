@@ -22,7 +22,7 @@ const cardVariants = {
   exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } },
 }
 
-const emptyForm = { name: '', destination: '', startDate: '', endDate: '', description: '' }
+const emptyForm = { name: '', destination: '', startDate: '', endDate: '', description: '', tripType: 'international' as 'international' | 'domestic' }
 
 function SheetBackdrop({ onClose }: { onClose: () => void }) {
   return (
@@ -119,6 +119,7 @@ export default function Trips() {
       startDate: trip.startDate || '',
       endDate: trip.endDate || '',
       description: '',
+      tripType: trip.tripType ?? 'international',
     })
   }
 
@@ -255,6 +256,24 @@ export default function Trips() {
                   </button>
                 </div>
                 <div className="px-5 pb-8 flex flex-col gap-4">
+                  {/* Trip type toggle */}
+                  <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-muted">
+                    {(['international', 'domestic'] as const).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setForm(f => ({ ...f, tripType: type }))}
+                        className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                          form.tripType === type
+                            ? type === 'domestic'
+                              ? 'bg-amber-500 text-white shadow-sm'
+                              : 'bg-blue-500 text-white shadow-sm'
+                            : 'text-muted-foreground'
+                        }`}
+                      >
+                        {type === 'international' ? '🌏 International' : '🇵🇭 Domestic PH'}
+                      </button>
+                    ))}
+                  </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="trip-name">Trip Name *</Label>
                     <Input

@@ -36,13 +36,18 @@ const moreItems = [
 export default function BottomNav() {
   const [moreOpen, setMoreOpen] = useState(false)
   const navigate = useNavigate()
-  const { activeTripId } = useTrip()
+  const { activeTripId, trip } = useTrip()
   const { signOut, user } = useAuth()
   const inLobby = !activeTripId
+  const isDomestic = trip?.tripInfo.tripType === 'domestic'
   // In lobby mode the user hasn't picked a trip — only the Home and Trips
   // tabs are valid. Trip-scoped destinations are hidden so they can't be
   // tapped into an empty trip context.
   const visibleMain = inLobby ? mainNav.filter(n => n.to === '/' || n.to === '/trips') : mainNav
+  const visibleMore = moreItems.filter(n => {
+    if (isDomestic && (n.to === '/passport' || n.to === '/currency')) return false
+    return true
+  })
 
   const handleMoreItem = (to: string) => {
     setMoreOpen(false)
@@ -106,7 +111,7 @@ export default function BottomNav() {
 
             {/* Grid */}
             <div className="grid grid-cols-4 gap-1 px-3 pb-6">
-              {moreItems.map(({ to, icon: Icon, label, color }) => (
+              {visibleMore.map(({ to, icon: Icon, label, color }) => (
                 <button
                   key={to}
                   onClick={() => handleMoreItem(to)}

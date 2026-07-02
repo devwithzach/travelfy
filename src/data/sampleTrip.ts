@@ -10,6 +10,7 @@ export const sampleTrip: TripData = {
     coverImage: '',
     description: '4 Days 3 Nights VIP Group Tour – Hong Kong & Macau',
     status: 'upcoming',
+    tripType: 'international',
   },
 
   flights: [

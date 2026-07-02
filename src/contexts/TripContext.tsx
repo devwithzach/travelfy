@@ -16,7 +16,7 @@ interface TripContextValue {
   selectTrip: (id: string) => void
   /** Drop the active trip without deleting it — returns to the lobby. */
   exitTrip: () => void
-  createNewTrip: (info: { name: string; destination: string; startDate: string; endDate: string; description: string }) => Promise<string>
+  createNewTrip: (info: { name: string; destination: string; startDate: string; endDate: string; description: string; tripType: 'international' | 'domestic' }) => Promise<string>
   deleteTripById: (id: string) => Promise<void>
   updateTrip: (updater: (prev: TripData) => TripData) => void
   resetTrip: () => Promise<void>
@@ -116,7 +116,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener('visibilitychange', handler)
   }, [refreshTrip])
 
-  const createNewTrip = useCallback(async (info: { name: string; destination: string; startDate: string; endDate: string; description: string }) => {
+  const createNewTrip = useCallback(async (info: { name: string; destination: string; startDate: string; endDate: string; description: string; tripType: 'international' | 'domestic' }) => {
     if (!userId) throw new Error('Not authenticated')
     const id = await storageService.createTrip(userId, info)
     const newSummary: TripSummary = {
@@ -127,6 +127,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       endDate: info.endDate,
       status: 'upcoming',
       coverImage: '',
+      tripType: info.tripType,
     }
     setTrips(prev => [newSummary, ...prev])
     return id
@@ -222,6 +223,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         coverImage: '',
         description: source.tripInfo.description,
         status: 'upcoming',
+        tripType: source.tripInfo.tripType,
       },
       settings: { ...source.settings },
       tourNotes: [...source.tourNotes],

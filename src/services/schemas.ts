@@ -168,6 +168,7 @@ export const tripRowSchema = z.object({
   description: str(),
   cover_image: str(),
   status: z.enum(['upcoming', 'active', 'completed']).catch('upcoming'),
+  trip_type: z.enum(['international', 'domestic']).catch('international'),
   traveler_name: str(),
   profile_picture: str(),
   home_currency: str('PHP'),
@@ -185,5 +186,6 @@ export const tripSummaryRowSchema = z.object({
   end_date: str(),
   status: z.enum(['upcoming', 'active', 'completed']).catch('upcoming'),
   cover_image: str(),
+  trip_type: z.enum(['international', 'domestic']).catch('international'),
 })
 
