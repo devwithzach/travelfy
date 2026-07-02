@@ -20,6 +20,7 @@ import Passport from '@/pages/Passport'
 import Currency from '@/pages/Currency'
 import Settings from '@/pages/Settings'
 import MapExplorer from '@/pages/MapExplorer'
+import Ferries from '@/pages/Ferries'
 import Photos from '@/pages/Photos'
 import Stats from '@/pages/Stats'
 import Landing from '@/pages/Landing'
@@ -68,6 +69,7 @@ function AppRoutes() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/flights" element={<Flights />} />
+          <Route path="/ferries" element={<Ferries />} />
           <Route path="/hotels" element={<Hotels />} />
           <Route path="/timeline" element={<Timeline />} />
           <Route path="/checklist" element={<Checklist />} />
