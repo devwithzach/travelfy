@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type {
-  TripData, TripSummary, Flight, Ferry, Bus, Hotel, ItineraryDay, ItineraryActivity,
+  TripData, TripSummary, Flight, Ferry, Bus, LocalTransport, Hotel, ItineraryDay, ItineraryActivity,
   ChecklistItem, Expense, Document, EmergencyContact, QuickLink,
   Note, VisaInfo, CurrencyRate
 } from '@/types'
@@ -9,10 +9,20 @@ import {
   flightRowSchema, hotelRowSchema, activityRowSchema, dayRowSchema,
   checklistRowSchema, expenseRowSchema, documentRowSchema, contactRowSchema,
   linkRowSchema, noteRowSchema, visaRowSchema, rateRowSchema, passportRowSchema,
-  busRowSchema, ferryRowSchema, tripRowSchema, tripSummaryRowSchema,
+  busRowSchema, localTransportRowSchema, ferryRowSchema, tripRowSchema, tripSummaryRowSchema,
 } from './schemas'
 
 // ── Mappers: validated DB row → app type ──────────────────
+
+function mapLocalTransport(r: unknown): LocalTransport {
+  const v = localTransportRowSchema.parse(r)
+  return {
+    id: v.id, type: v.type,
+    from: v.from_place, to: v.to_place,
+    fare: v.fare, currency: v.currency,
+    notes: v.notes, date: v.date,
+  }
+}
 
 function mapBus(r: unknown): Bus {
   const v = busRowSchema.parse(r)
@@ -159,6 +169,7 @@ async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripDa
     { data: flights },
     { data: ferries },
     { data: buses },
+    { data: localTransports },
     { data: hotels },
     { data: days },
     { data: checklist },
@@ -174,6 +185,7 @@ async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripDa
     supabase.from('flights').select('*').eq('trip_id', tripId).order('sort_order'),
     supabase.from('ferries').select('*').eq('trip_id', tripId).order('sort_order'),
     supabase.from('buses').select('*').eq('trip_id', tripId).order('sort_order'),
+    supabase.from('local_transports').select('*').eq('trip_id', tripId).order('date', { ascending: false }),
     supabase.from('hotels').select('*').eq('trip_id', tripId).order('check_in'),
     supabase.from('itinerary_days').select('*, itinerary_activities(*)').eq('trip_id', tripId).order('day_number'),
     supabase.from('checklist_items').select('*').eq('trip_id', tripId).order('sort_order'),
@@ -212,6 +224,7 @@ async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripDa
     flights: (flights ?? []).map(mapFlight),
     ferries: (ferries ?? []).map(mapFerry),
     buses: (buses ?? []).map(mapBus),
+    localTransports: (localTransports ?? []).map(mapLocalTransport),
     hotels: (hotels ?? []).map(mapHotel),
     itinerary: (days ?? []).map(mapDay),
     checklist: (checklist ?? []).map(mapChecklist),
@@ -420,6 +433,13 @@ export const storageService = {
         arrival_date: b.arrivalDate, arrival_time: b.arrivalTime,
         seat_number: b.seatNumber, booking_reference: b.bookingReference,
         status: b.status, notes: b.notes, sort_order: i,
+      }))),
+
+      // Local transports
+      syncTable('local_transports', tripId, trip.localTransports.map(t => ({
+        id: t.id, trip_id: tripId, user_id: userId,
+        type: t.type, from_place: t.from, to_place: t.to,
+        fare: t.fare, currency: t.currency, notes: t.notes, date: t.date,
       }))),
 
       // Hotels

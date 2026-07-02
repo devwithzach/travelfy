@@ -62,6 +62,7 @@ export const sampleTrip: TripData = {
 
   ferries: [],
   buses: [],
+  localTransports: [],
 
   hotels: [
     {

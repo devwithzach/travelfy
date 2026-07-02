@@ -16,6 +16,7 @@ export function createEmptyTrip(id = `trip-${Date.now()}`): TripData {
     flights: [],
     ferries: [],
     buses: [],
+    localTransports: [],
     hotels: [],
     itinerary: [],
     checklist: [],

@@ -10,6 +10,17 @@ const num = (def = 0) => z.number().catch(def)
 const bool = (def = false) => z.boolean().catch(def)
 const strArr = () => z.array(z.string()).catch([])
 
+export const localTransportRowSchema = z.object({
+  id: str(),
+  type: z.enum(['grab', 'tricycle', 'jeepney', 'habal-habal', 'uv-express', 'pedicab', 'taxi', 'fx', 'other']).catch('other'),
+  from_place: str(),
+  to_place: str(),
+  fare: num(),
+  currency: str('PHP'),
+  notes: str(),
+  date: str(),
+})
+
 export const busRowSchema = z.object({
   id: str(),
   operator: str(),

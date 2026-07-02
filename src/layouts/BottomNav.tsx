@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Plane, Building2, FileText, ListChecks,
   DollarSign, AlertCircle, StickyNote, Map, Link2, Settings,
-  MapPin, Camera, Globe, Layers, MoreHorizontal, X, TrendingUp, BarChart3, LogOut, Anchor, Bus
+  MapPin, Camera, Globe, Layers, MoreHorizontal, X, TrendingUp, BarChart3, LogOut, Anchor, Bus, Bike
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useTrip } from '@/contexts/TripContext'
@@ -22,6 +22,7 @@ const moreItems = [
   { to: '/flights', icon: Plane, label: 'Flights', color: '#3b82f6' },
   { to: '/ferries', icon: Anchor, label: 'Ferries', color: '#06b6d4' },
   { to: '/buses', icon: Bus, label: 'Bus / Van', color: '#f59e0b' },
+  { to: '/local-transport', icon: Bike, label: 'Local Rides', color: '#10b981' },
   { to: '/hotels', icon: Building2, label: 'Hotels', color: '#8b5cf6' },
   { to: '/expenses', icon: DollarSign, label: 'Expenses', color: '#f43f5e' },
   { to: '/stats', icon: BarChart3, label: 'Stats', color: '#10b981' },

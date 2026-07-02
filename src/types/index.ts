@@ -224,11 +224,23 @@ export interface Bus {
   notes: string
 }
 
+export interface LocalTransport {
+  id: string
+  type: 'grab' | 'tricycle' | 'jeepney' | 'habal-habal' | 'uv-express' | 'pedicab' | 'taxi' | 'fx' | 'other'
+  from: string
+  to: string
+  fare: number
+  currency: string
+  notes: string
+  date: string
+}
+
 export interface TripData {
   tripInfo: TripInfo
   flights: Flight[]
   ferries: Ferry[]
   buses: Bus[]
+  localTransports: LocalTransport[]
   hotels: Hotel[]
   itinerary: ItineraryDay[]
   checklist: ChecklistItem[]
