@@ -148,13 +148,15 @@ export default function Trips() {
 
   const openEdit = (trip: TripSummary) => {
     setEditTarget(trip)
+    const dest = trip.destination || ''
+    const storedType = trip.tripType ?? 'international'
     setEditForm({
       name: trip.name || '',
-      destination: trip.destination || '',
+      destination: dest,
       startDate: trip.startDate || '',
       endDate: trip.endDate || '',
       description: '',
-      tripType: trip.tripType ?? 'international',
+      tripType: storedType === 'domestic' ? 'domestic' : isPHDestination(dest) ? 'domestic' : 'international',
     })
   }
 
