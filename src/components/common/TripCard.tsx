@@ -103,9 +103,14 @@ export default function TripCard({ trip, onSelect, onDelete, onDuplicate, onEdit
           )}
           <div className="relative">
             <div className="flex items-start justify-between gap-2 mb-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest opacity-90 bg-white/15 px-2 py-0.5 rounded-full">
-                {statusLabel[liveStatus]}
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-widest opacity-90 bg-white/15 px-2 py-0.5 rounded-full">
+                  {statusLabel[liveStatus]}
+                </span>
+                <span className="text-[10px] font-semibold opacity-90 bg-white/15 px-2 py-0.5 rounded-full">
+                  {trip.tripType === 'domestic' ? '🇵🇭 Domestic' : '🌏 Intl'}
+                </span>
+              </div>
               {countdown && (
                 <span className="text-[10px] font-semibold opacity-95 bg-white/15 px-2 py-0.5 rounded-full">
                   {countdown}
