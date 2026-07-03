@@ -24,6 +24,41 @@ const cardVariants = {
 
 const emptyForm = { name: '', destination: '', startDate: '', endDate: '', description: '', tripType: 'international' as 'international' | 'domestic' }
 
+const PH_KEYWORDS = [
+  'philippines', 'pilipinas', 'pinas',
+  'luzon', 'visayas', 'mindanao',
+  'manila', 'metro manila', 'ncr', 'makati', 'bgc', 'bonifacio', 'pasig', 'quezon city', 'taguig', 'pasay', 'paranaque', 'muntinlupa', 'marikina', 'mandaluyong', 'san juan', 'caloocan', 'malabon', 'navotas', 'valenzuela', 'las pinas',
+  'palawan', 'el nido', 'coron', 'puerto princesa',
+  'cebu', 'cebu city', 'mactan',
+  'boracay', 'aklan', 'kalibo',
+  'bohol', 'tagbilaran', 'panglao', 'chocolate hills',
+  'siargao', 'general luna',
+  'davao', 'davao city',
+  'iloilo', 'bacolod', 'negros',
+  'baguio', 'benguet', 'sagada', 'batad', 'ifugao', 'cordillera',
+  'batangas', 'anilao', 'nasugbu',
+  'laguna', 'tagaytay', 'cavite',
+  'dumaguete', 'siquijor',
+  'leyte', 'tacloban', 'samar',
+  'zamboanga', 'cagayan', 'iligan', 'general santos', 'gensan',
+  'vigan', 'ilocos', 'laoag',
+  'caramoan', 'camarines', 'naga', 'bicol', 'mayon',
+  'batanes', 'basco',
+  'camiguin', 'mambajao',
+  'surigao', 'dinagat',
+  'tawi-tawi', 'basilan', 'sulu',
+  'antipolo', 'rizal', 'tanay',
+  'clark', 'pampanga', 'angeles',
+  'subic', 'olongapo', 'zambales',
+  'pangasinan', 'dagupan', 'hundred islands',
+  'isabela', 'cagayan valley', 'tuguegarao',
+]
+
+function isPHDestination(destination: string): boolean {
+  const lower = destination.toLowerCase()
+  return PH_KEYWORDS.some(kw => lower.includes(kw))
+}
+
 function SheetBackdrop({ onClose }: { onClose: () => void }) {
   return (
     <motion.div
@@ -289,8 +324,15 @@ export default function Trips() {
                       id="trip-dest"
                       placeholder="e.g. Tokyo, Japan"
                       value={form.destination}
-                      onChange={e => setForm(f => ({ ...f, destination: e.target.value }))}
+                      onChange={e => {
+                        const dest = e.target.value
+                        const autoType = isPHDestination(dest) ? 'domestic' : undefined
+                        setForm(f => ({ ...f, destination: dest, ...(autoType ? { tripType: autoType } : {}) }))
+                      }}
                     />
+                    {isPHDestination(form.destination) && form.tripType === 'domestic' && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">🇵🇭 Auto-detected as Domestic PH</p>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5">
@@ -360,6 +402,24 @@ export default function Trips() {
                   </button>
                 </div>
                 <div className="px-5 pb-8 flex flex-col gap-4">
+                  {/* Trip type toggle */}
+                  <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-muted">
+                    {(['international', 'domestic'] as const).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setEditForm(f => ({ ...f, tripType: type }))}
+                        className={`py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                          editForm.tripType === type
+                            ? type === 'domestic'
+                              ? 'bg-amber-500 text-white shadow-sm'
+                              : 'bg-blue-500 text-white shadow-sm'
+                            : 'text-muted-foreground'
+                        }`}
+                      >
+                        {type === 'international' ? '🌏 International' : '🇵🇭 Domestic PH'}
+                      </button>
+                    ))}
+                  </div>
                   <div className="flex flex-col gap-1.5">
                     <Label htmlFor="edit-name">Trip Name *</Label>
                     <Input
@@ -375,8 +435,15 @@ export default function Trips() {
                       id="edit-dest"
                       placeholder="e.g. Tokyo, Japan"
                       value={editForm.destination}
-                      onChange={e => setEditForm(f => ({ ...f, destination: e.target.value }))}
+                      onChange={e => {
+                        const dest = e.target.value
+                        const autoType = isPHDestination(dest) ? 'domestic' : undefined
+                        setEditForm(f => ({ ...f, destination: dest, ...(autoType ? { tripType: autoType } : {}) }))
+                      }}
                     />
+                    {isPHDestination(editForm.destination) && editForm.tripType === 'domestic' && (
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">🇵🇭 Auto-detected as Domestic PH</p>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex flex-col gap-1.5">
