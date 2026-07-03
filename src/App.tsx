@@ -24,6 +24,7 @@ import Ferries from '@/pages/Ferries'
 import Buses from '@/pages/Buses'
 import LocalTransport from '@/pages/LocalTransport'
 import Weather from '@/pages/Weather'
+import Advisories from '@/pages/Advisories'
 import Photos from '@/pages/Photos'
 import Stats from '@/pages/Stats'
 import Landing from '@/pages/Landing'
@@ -76,6 +77,7 @@ function AppRoutes() {
           <Route path="/buses" element={<Buses />} />
           <Route path="/local-transport" element={<LocalTransport />} />
           <Route path="/weather" element={<Weather />} />
+          <Route path="/advisories" element={<Advisories />} />
           <Route path="/hotels" element={<Hotels />} />
           <Route path="/timeline" element={<Timeline />} />
           <Route path="/checklist" element={<Checklist />} />

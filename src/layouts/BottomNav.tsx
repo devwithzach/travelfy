@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Plane, Building2, FileText, ListChecks,
   DollarSign, AlertCircle, StickyNote, Map, Link2, Settings,
-  MapPin, Camera, Globe, Layers, MoreHorizontal, X, TrendingUp, BarChart3, LogOut, Anchor, Bus, Bike, CloudRain
+  MapPin, Camera, Globe, Layers, MoreHorizontal, X, TrendingUp, BarChart3, LogOut, Anchor, Bus, Bike, CloudRain, ShieldAlert
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useTrip } from '@/contexts/TripContext'
@@ -24,6 +24,7 @@ const moreItems = [
   { to: '/buses', icon: Bus, label: 'Bus / Van', color: '#f59e0b' },
   { to: '/local-transport', icon: Bike, label: 'Local Rides', color: '#10b981' },
   { to: '/weather', icon: CloudRain, label: 'Weather', color: '#38bdf8' },
+  { to: '/advisories', icon: ShieldAlert, label: 'Advisories', color: '#ef4444' },
   { to: '/hotels', icon: Building2, label: 'Hotels', color: '#8b5cf6' },
   { to: '/expenses', icon: DollarSign, label: 'Expenses', color: '#f43f5e' },
   { to: '/stats', icon: BarChart3, label: 'Stats', color: '#10b981' },
