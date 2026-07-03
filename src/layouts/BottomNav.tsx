@@ -49,8 +49,11 @@ export default function BottomNav() {
   // tabs are valid. Trip-scoped destinations are hidden so they can't be
   // tapped into an empty trip context.
   const visibleMain = inLobby ? mainNav.filter(n => n.to === '/' || n.to === '/trips') : mainNav
+  const PH_ONLY = ['/ferries', '/buses', '/local-transport', '/weather', '/advisories']
+  const INTL_ONLY = ['/passport', '/currency']
   const visibleMore = moreItems.filter(n => {
-    if (isDomestic && (n.to === '/passport' || n.to === '/currency')) return false
+    if (isDomestic && INTL_ONLY.includes(n.to)) return false
+    if (!isDomestic && PH_ONLY.includes(n.to)) return false
     return true
   })
 

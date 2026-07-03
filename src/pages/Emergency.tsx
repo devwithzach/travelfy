@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { AlertCircle, Plus, Trash2, Edit2, Phone, Copy, Building, Shield, Hospital, User } from 'lucide-react'
+import { AlertCircle, Plus, Trash2, Edit2, Phone, Copy, Building, Shield, Hospital, User, Sparkles } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import type { EmergencyContact } from '@/types'
 import PageHeader from '@/components/common/PageHeader'
@@ -23,6 +23,17 @@ const typeConfig = {
   tour_guide: { label: 'Tour Guide', icon: User, color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30' },
 }
 
+const PH_PRESET: Omit<EmergencyContact, 'id'>[] = [
+  { name: 'PNP Emergency',             role: 'Philippine National Police',      phone: '911',               type: 'police',   country: 'Philippines', address: '', notes: 'National emergency hotline' },
+  { name: 'Bureau of Fire Protection', role: 'BFP Fire Emergency',              phone: '160',               type: 'police',   country: 'Philippines', address: '', notes: 'Fire emergencies nationwide' },
+  { name: 'Philippine Red Cross',      role: 'Disaster & Medical Response',     phone: '143',               type: 'hospital', country: 'Philippines', address: '', notes: '24/7 disaster response & blood bank' },
+  { name: 'NDRRMC Operations',         role: 'Disaster Risk Reduction',         phone: '02-8911-5061',      type: 'police',   country: 'Philippines', address: '', notes: '24/7 disaster operations center' },
+  { name: 'Philippine Coast Guard',    role: 'Maritime Emergencies',            phone: '02-5321-2431',      type: 'police',   country: 'Philippines', address: '', notes: 'Sea rescue & maritime safety' },
+  { name: 'DOH Health Hotline',        role: 'Department of Health',            phone: '1555',              type: 'hospital', country: 'Philippines', address: '', notes: 'Health emergencies & disease reports' },
+  { name: 'DSWD Action Center',        role: 'Social Welfare & Development',    phone: '02-8931-8101',      type: 'personal', country: 'Philippines', address: '', notes: 'Social services & disaster victims' },
+  { name: 'NBI Emergency',             role: 'National Bureau of Investigation', phone: '02-8523-8231',    type: 'police',   country: 'Philippines', address: '', notes: 'Criminal investigation' },
+]
+
 const defaultContact = (): EmergencyContact => ({
   id: crypto.randomUUID(),
   name: '',
@@ -40,8 +51,20 @@ export default function Emergency() {
   const [editing, setEditing] = useState<EmergencyContact | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
 
+  const isDomestic = trip.tripInfo.tripType === 'domestic'
+
   const openAdd = () => { setEditing(defaultContact()); setDialogOpen(true) }
   const openEdit = (c: EmergencyContact) => { setEditing({ ...c }); setDialogOpen(true) }
+
+  const loadPHContacts = () => {
+    const existing = new Set(trip.emergencyContacts.map(c => c.phone))
+    const newContacts = PH_PRESET
+      .filter(c => !existing.has(c.phone))
+      .map(c => ({ ...c, id: crypto.randomUUID() }))
+    if (newContacts.length > 0) {
+      updateTrip(prev => ({ ...prev, emergencyContacts: [...prev.emergencyContacts, ...newContacts] }))
+    }
+  }
 
   const save = () => {
     if (!editing) return
@@ -88,13 +111,29 @@ export default function Emergency() {
       />
 
       {/* Emergency tip */}
-      <div className="px-4 mb-4">
+      <div className="px-4 mb-3">
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3">
           <p className="text-xs text-red-700 dark:text-red-400 font-medium">
-            🚨 In any emergency: Call local police (999 HK/Macau) or your nearest embassy.
+            🚨 {isDomestic
+              ? 'In any emergency: Call 911 (PNP) or 143 (Red Cross).'
+              : 'In any emergency: Call local police or your nearest embassy.'
+            }
           </p>
         </div>
       </div>
+
+      {/* PH pre-fill button — domestic only */}
+      {isDomestic && (
+        <div className="px-4 mb-3">
+          <button
+            onClick={loadPHContacts}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-red-400/50 bg-red-500/5 text-red-600 dark:text-red-400 text-sm font-semibold hover:bg-red-500/10 active:scale-[0.98] transition-all"
+          >
+            <Sparkles className="h-4 w-4" />
+            Pre-fill PH Emergency Contacts
+          </button>
+        </div>
+      )}
 
       <div className="px-4 space-y-4">
         {trip.emergencyContacts.length === 0 ? (
