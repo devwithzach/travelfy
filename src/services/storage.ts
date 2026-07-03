@@ -359,7 +359,7 @@ export const storageService = {
   async updateTripBasic(
     userId: string,
     tripId: string,
-    info: { name: string; destination: string; startDate: string; endDate: string; description: string },
+    info: { name: string; destination: string; startDate: string; endDate: string; description: string; tripType: string },
   ): Promise<void> {
     await supabase.from('trips').update({
       name: info.name,
@@ -367,6 +367,7 @@ export const storageService = {
       start_date: info.startDate,
       end_date: info.endDate,
       description: info.description,
+      trip_type: info.tripType,
     }).eq('id', tripId).eq('user_id', userId)
   },
 

@@ -28,7 +28,7 @@ interface TripContextValue {
   /** Clone an existing trip's structure (no expenses, no photos, no per-day dates). */
   duplicateTrip: (sourceId: string, overrides?: { name?: string }) => Promise<string>
   /** Update just name/destination/dates/description without loading the full trip. */
-  updateTripBasic: (tripId: string, info: { name: string; destination: string; startDate: string; endDate: string; description: string }) => Promise<void>
+  updateTripBasic: (tripId: string, info: { name: string; destination: string; startDate: string; endDate: string; description: string; tripType: string }) => Promise<void>
 }
 
 const TripContext = createContext<TripContextValue | null>(null)
@@ -264,7 +264,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
   const updateTripBasic = useCallback(async (
     tripId: string,
-    info: { name: string; destination: string; startDate: string; endDate: string; description: string },
+    info: { name: string; destination: string; startDate: string; endDate: string; description: string; tripType: string },
   ) => {
     if (!userId) return
     await storageService.updateTripBasic(userId, tripId, info)
@@ -274,11 +274,12 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       destination: info.destination,
       startDate: info.startDate,
       endDate: info.endDate,
+      tripType: info.tripType as 'international' | 'domestic',
     }))
     if (activeTripId === tripId) {
       setTrip(prev => ({
         ...prev,
-        tripInfo: { ...prev.tripInfo, ...info },
+        tripInfo: { ...prev.tripInfo, ...info, tripType: info.tripType as 'international' | 'domestic' },
       }))
     }
   }, [userId, activeTripId])
