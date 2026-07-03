@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { DollarSign, Plus, Trash2, Edit2, TrendingUp, X } from 'lucide-react'
+import { DollarSign, Plus, Trash2, Edit2, TrendingUp, X, Pencil, Check, AlertTriangle, TrendingDown, Flame } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { useTrip } from '@/contexts/TripContext'
 import type { Expense } from '@/types'
@@ -15,6 +15,7 @@ import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatDate } from '@/utils/dateUtils'
 import { sumExpenses, convert } from '@/utils/currency'
+import { cn } from '@/utils/cn'
 
 const CATEGORY_CONFIG = {
   food: { label: 'Food & Dining', color: '#f59e0b' },
@@ -40,6 +41,8 @@ export default function Expenses() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)
   const [receiptView, setReceiptView] = useState<string | null>(null)
+  const [editingBudget, setEditingBudget] = useState(false)
+  const [budgetInput, setBudgetInput] = useState('')
 
   const { expenses, settings, currencyRates } = trip
   const totalBudget = settings.totalBudget
@@ -47,6 +50,36 @@ export default function Expenses() {
 
   const { total: totalSpent, unconvertedCount } = sumExpenses(currencyRates, expenses, homeCurrency)
   const budgetUsed = totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : 0
+
+  const saveBudget = () => {
+    const val = parseFloat(budgetInput)
+    if (!isNaN(val) && val >= 0) {
+      updateTrip(prev => ({ ...prev, settings: { ...prev.settings, totalBudget: val } }))
+    }
+    setEditingBudget(false)
+  }
+
+  // ── Burn rate analytics ────────────────────────────────────
+  const burnRate = useMemo(() => {
+    const start = trip.tripInfo.startDate
+    const end = trip.tripInfo.endDate
+    if (!start || !end) return null
+
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    const startD = new Date(start + 'T00:00:00')
+    const endD = new Date(end + 'T00:00:00')
+    const totalDays = Math.max(1, Math.round((endD.getTime() - startD.getTime()) / 86400000) + 1)
+    const daysElapsed = Math.max(0, Math.min(totalDays, Math.round((now.getTime() - startD.getTime()) / 86400000) + 1))
+    const daysRemaining = Math.max(0, totalDays - daysElapsed)
+    const avgPerDay = daysElapsed > 0 ? totalSpent / daysElapsed : 0
+    const projectedTotal = avgPerDay * totalDays
+    const safePerDay = totalBudget > 0 && daysRemaining > 0 ? (totalBudget - totalSpent) / daysRemaining : null
+    const overBudget = totalBudget > 0 && totalSpent > totalBudget
+    const atRisk = totalBudget > 0 && !overBudget && projectedTotal > totalBudget * 0.9
+
+    return { totalDays, daysElapsed, daysRemaining, avgPerDay, projectedTotal, safePerDay, overBudget, atRisk }
+  }, [trip.tripInfo.startDate, trip.tripInfo.endDate, totalSpent, totalBudget])
 
   const categoryTotals = Object.keys(CATEGORY_CONFIG).map(cat => {
     const items = expenses.filter(e => e.category === cat)
@@ -97,36 +130,65 @@ export default function Expenses() {
       />
 
       <div className="px-4 space-y-3">
-        {/* Budget Summary */}
+        {/* Budget Summary card */}
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-start justify-between mb-3">
               <div>
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Spent</p>
-                <p className="text-3xl font-bold">{homeCurrency} {totalSpent.toLocaleString()}</p>
+                <p className="text-3xl font-bold tabular-nums">{homeCurrency} {Math.round(totalSpent).toLocaleString()}</p>
               </div>
-              {totalBudget > 0 && (
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground">Budget</p>
-                  <p className="text-lg font-semibold">{homeCurrency} {totalBudget.toLocaleString()}</p>
-                </div>
-              )}
+              <div className="text-right">
+                {editingBudget ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      autoFocus
+                      value={budgetInput}
+                      onChange={e => setBudgetInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveBudget(); if (e.key === 'Escape') setEditingBudget(false) }}
+                      className="w-28 px-2 py-1 rounded-lg bg-muted border border-border text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary/30"
+                      placeholder="Budget"
+                    />
+                    <button onClick={saveBudget} className="p-1 rounded-lg bg-primary/10 text-primary">
+                      <Check className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => { setBudgetInput(totalBudget > 0 ? String(totalBudget) : ''); setEditingBudget(true) }}
+                    className="flex items-center gap-1.5 text-right group"
+                  >
+                    <div>
+                      <p className="text-xs text-muted-foreground">{totalBudget > 0 ? 'Budget' : 'Set budget'}</p>
+                      {totalBudget > 0 && <p className="text-lg font-semibold tabular-nums">{homeCurrency} {totalBudget.toLocaleString()}</p>}
+                    </div>
+                    <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </button>
+                )}
+              </div>
             </div>
+
             {totalBudget > 0 && (
               <>
                 <Progress
                   value={budgetUsed}
-                  className={`h-3 ${budgetUsed > 90 ? '[&>div]:bg-rose-500' : budgetUsed > 70 ? '[&>div]:bg-amber-500' : ''}`}
+                  className={cn('h-3', budgetUsed > 90 ? '[&>div]:bg-rose-500' : budgetUsed > 70 ? '[&>div]:bg-amber-500' : '')}
                 />
                 <div className="flex justify-between mt-1.5 text-xs text-muted-foreground">
-                  <span>{Math.round(budgetUsed)}% used</span>
-                  <span>{homeCurrency} {(totalBudget - totalSpent).toLocaleString()} remaining</span>
+                  <span className="tabular-nums">{Math.round(budgetUsed)}% used</span>
+                  <span className={cn('tabular-nums font-medium', totalSpent > totalBudget ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400')}>
+                    {totalSpent > totalBudget
+                      ? `${homeCurrency} ${Math.round(totalSpent - totalBudget).toLocaleString()} over`
+                      : `${homeCurrency} ${Math.round(totalBudget - totalSpent).toLocaleString()} left`}
+                  </span>
                 </div>
               </>
             )}
+
             {unconvertedCount > 0 && (
               <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                {unconvertedCount} expense{unconvertedCount === 1 ? '' : 's'} excluded — no exchange rate set. Add rates in the Currency tab.
+                {unconvertedCount} expense{unconvertedCount === 1 ? '' : 's'} excluded — no exchange rate set.
               </p>
             )}
           </CardContent>
@@ -135,6 +197,7 @@ export default function Expenses() {
         <Tabs defaultValue="list">
           <TabsList className="w-full">
             <TabsTrigger value="list" className="flex-1">Transactions</TabsTrigger>
+            <TabsTrigger value="budget" className="flex-1">Budget</TabsTrigger>
             <TabsTrigger value="charts" className="flex-1">Charts</TabsTrigger>
           </TabsList>
 
@@ -214,6 +277,144 @@ export default function Expenses() {
                   )
                 })}
               </AnimatePresence>
+            )}
+          </TabsContent>
+
+          <TabsContent value="budget" className="space-y-3 mt-3">
+            {/* No budget set */}
+            {totalBudget === 0 && (
+              <Card>
+                <CardContent className="p-6 text-center space-y-3">
+                  <Flame className="h-10 w-10 mx-auto text-muted-foreground/30" />
+                  <p className="text-sm font-semibold">No budget set</p>
+                  <p className="text-xs text-muted-foreground">Tap the "Set budget" button above to start tracking your burn rate.</p>
+                  <button
+                    onClick={() => { setBudgetInput(''); setEditingBudget(true) }}
+                    className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold active:scale-95 transition-all"
+                  >
+                    Set Budget
+                  </button>
+                </CardContent>
+              </Card>
+            )}
+
+            {totalBudget > 0 && (
+              <>
+                {/* Status alert */}
+                {(burnRate?.overBudget || burnRate?.atRisk) && (
+                  <div className={cn(
+                    'flex gap-3 p-4 rounded-2xl border',
+                    burnRate.overBudget
+                      ? 'bg-rose-500/10 border-rose-500/30'
+                      : 'bg-amber-500/10 border-amber-500/30',
+                  )}>
+                    <AlertTriangle className={cn('h-5 w-5 shrink-0 mt-0.5', burnRate.overBudget ? 'text-rose-500' : 'text-amber-500')} />
+                    <div>
+                      <p className={cn('text-sm font-bold', burnRate.overBudget ? 'text-rose-600 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400')}>
+                        {burnRate.overBudget ? 'Over Budget' : 'At Risk of Overspending'}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {burnRate.overBudget
+                          ? `You've exceeded your budget by ${homeCurrency} ${Math.round(totalSpent - totalBudget).toLocaleString()}.`
+                          : `At your current rate you'll end up at ${homeCurrency} ${Math.round(burnRate.projectedTotal).toLocaleString()} — above your budget.`}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Burn rate metrics */}
+                {burnRate && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2 mb-1">
+                          <TrendingUp className="h-3.5 w-3.5 text-blue-500" />
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Daily Avg</p>
+                        </div>
+                        <p className="text-xl font-bold tabular-nums">{homeCurrency} {Math.round(burnRate.avgPerDay).toLocaleString()}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">per day</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2 mb-1">
+                          <TrendingDown className="h-3.5 w-3.5 text-emerald-500" />
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Safe to Spend</p>
+                        </div>
+                        <p className={cn('text-xl font-bold tabular-nums', burnRate.safePerDay !== null && burnRate.safePerDay < 0 ? 'text-rose-500' : '')}>
+                          {burnRate.safePerDay !== null
+                            ? `${homeCurrency} ${Math.max(0, Math.round(burnRate.safePerDay)).toLocaleString()}`
+                            : '—'}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {burnRate.daysRemaining > 0 ? `per day · ${burnRate.daysRemaining}d left` : 'trip ended'}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-1">Projected Total</p>
+                        <p className={cn('text-xl font-bold tabular-nums', burnRate.projectedTotal > totalBudget ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400')}>
+                          {homeCurrency} {Math.round(burnRate.projectedTotal).toLocaleString()}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">at current rate</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-1">Trip Progress</p>
+                        <p className="text-xl font-bold tabular-nums">
+                          {burnRate.daysElapsed}<span className="text-muted-foreground text-sm font-normal">/{burnRate.totalDays}d</span>
+                        </p>
+                        <Progress
+                          value={(burnRate.daysElapsed / burnRate.totalDays) * 100}
+                          className="h-1.5 mt-2"
+                        />
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Category spending breakdown */}
+                {categoryTotals.length > 0 && (
+                  <Card>
+                    <CardContent className="p-4">
+                      <p className="text-sm font-semibold mb-3">Spending by Category</p>
+                      <div className="space-y-3">
+                        {categoryTotals.map(cat => {
+                          const pct = totalSpent > 0 ? (cat.value / totalSpent) * 100 : 0
+                          const ofBudget = totalBudget > 0 ? (cat.value / totalBudget) * 100 : 0
+                          return (
+                            <div key={cat.key}>
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cat.color }} />
+                                  <span className="text-xs font-medium">{cat.name}</span>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-xs font-bold tabular-nums">{homeCurrency} {Math.round(cat.value).toLocaleString()}</span>
+                                  <span className="text-[10px] text-muted-foreground ml-1.5 tabular-nums">({Math.round(pct)}%)</span>
+                                </div>
+                              </div>
+                              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all"
+                                  style={{ width: `${Math.min(ofBudget, 100)}%`, backgroundColor: cat.color }}
+                                />
+                              </div>
+                              {totalBudget > 0 && (
+                                <p className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
+                                  {Math.round(ofBudget)}% of total budget
+                                </p>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
             )}
           </TabsContent>
 
