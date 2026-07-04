@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Plane, Building2, FileText, ListChecks,
   DollarSign, AlertCircle, StickyNote, Map, Link2, Settings,
-  MapPin, Camera, Globe, Layers, MoreHorizontal, X, TrendingUp, BarChart3, LogOut, Anchor, Bus, Bike, CloudRain, ShieldAlert
+  MapPin, Camera, Globe, Layers, MoreHorizontal, X, TrendingUp, BarChart3, LogOut, Anchor, Bus, Bike, CloudRain, ShieldAlert, BookOpen
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useTrip } from '@/contexts/TripContext'
@@ -25,6 +25,7 @@ const moreItems = [
   { to: '/local-transport', icon: Bike, label: 'Local Rides', color: '#10b981' },
   { to: '/weather', icon: CloudRain, label: 'Weather', color: '#38bdf8' },
   { to: '/advisories', icon: ShieldAlert, label: 'Advisories', color: '#ef4444' },
+  { to: '/phrasebook', icon: BookOpen, label: 'Phrasebook', color: '#8b5cf6' },
   { to: '/hotels', icon: Building2, label: 'Hotels', color: '#8b5cf6' },
   { to: '/expenses', icon: DollarSign, label: 'Expenses', color: '#f43f5e' },
   { to: '/stats', icon: BarChart3, label: 'Stats', color: '#10b981' },
@@ -49,7 +50,7 @@ export default function BottomNav() {
   // tabs are valid. Trip-scoped destinations are hidden so they can't be
   // tapped into an empty trip context.
   const visibleMain = inLobby ? mainNav.filter(n => n.to === '/' || n.to === '/trips') : mainNav
-  const PH_ONLY = ['/ferries', '/buses', '/local-transport', '/weather', '/advisories']
+  const PH_ONLY = ['/ferries', '/buses', '/local-transport', '/weather', '/advisories', '/phrasebook']
   const INTL_ONLY = ['/passport', '/currency']
   const visibleMore = moreItems.filter(n => {
     if (isDomestic && INTL_ONLY.includes(n.to)) return false
