@@ -252,7 +252,7 @@ export default function Weather() {
                   </div>
                   <div className="flex items-center gap-1.5 justify-end text-xs text-muted-foreground">
                     <Thermometer className="h-3.5 w-3.5 text-orange-400" />
-                    <span>Humidity</span>
+                    <span className="tabular-nums">Feels {cur.feelsLike}°C</span>
                   </div>
                   {lastFetched && (
                     <p className="text-[10px] text-muted-foreground/50 mt-2">Updated {lastFetched}</p>
