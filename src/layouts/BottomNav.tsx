@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Plane, Building2, FileText, ListChecks,
   DollarSign, AlertCircle, StickyNote, Map, Link2, Settings,
-  MapPin, Camera, Globe, Layers, MoreHorizontal, X, TrendingUp, BarChart3, LogOut, Anchor, Bus, Bike, CloudRain, ShieldAlert, BookOpen, Signal
+  MapPin, Camera, Globe, Layers, MoreHorizontal, X, TrendingUp, BarChart3, LogOut, Anchor, Bus, Bike, CloudRain, ShieldAlert, BookOpen, Signal, Shield
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useTrip } from '@/contexts/TripContext'
@@ -27,6 +27,8 @@ const moreItems = [
   { to: '/advisories', icon: ShieldAlert, label: 'Advisories', color: '#ef4444' },
   { to: '/phrasebook',    icon: BookOpen, label: 'Phrasebook',   color: '#8b5cf6' },
   { to: '/connectivity', icon: Signal,   label: 'Connectivity', color: '#06b6d4' },
+  { to: '/insurance',    icon: Shield,   label: 'Insurance',    color: '#10b981' },
+  { to: '/country-info', icon: Globe,    label: 'Country Info', color: '#0ea5e9' },
   { to: '/hotels', icon: Building2, label: 'Hotels', color: '#8b5cf6' },
   { to: '/expenses', icon: DollarSign, label: 'Expenses', color: '#f43f5e' },
   { to: '/stats', icon: BarChart3, label: 'Stats', color: '#10b981' },
@@ -51,8 +53,8 @@ export default function BottomNav() {
   // tabs are valid. Trip-scoped destinations are hidden so they can't be
   // tapped into an empty trip context.
   const visibleMain = inLobby ? mainNav.filter(n => n.to === '/' || n.to === '/trips') : mainNav
-  const PH_ONLY = ['/ferries', '/buses', '/local-transport', '/weather', '/advisories', '/phrasebook', '/connectivity']
-  const INTL_ONLY = ['/passport', '/currency']
+  const PH_ONLY = ['/ferries', '/buses', '/local-transport', '/weather', '/advisories', '/connectivity']
+  const INTL_ONLY = ['/passport', '/currency', '/country-info']
   const visibleMore = moreItems.filter(n => {
     if (isDomestic && INTL_ONLY.includes(n.to)) return false
     if (!isDomestic && PH_ONLY.includes(n.to)) return false

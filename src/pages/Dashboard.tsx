@@ -4,14 +4,15 @@ import { useNavigate } from 'react-router-dom'
 import {
   Plane, Building2, Map, ListChecks, DollarSign,
   AlertCircle, Clock, CalendarDays, ChevronRight,
-  TrendingUp, CheckSquare, FileText, Globe, Circle, Check, MapPin, Plus, Pencil, RefreshCw
+  TrendingUp, CheckSquare, FileText, Globe, Circle, Check, MapPin, Plus, Pencil, RefreshCw,
+  ArrowLeftRight
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useCurrentPlace } from '@/hooks/useCurrentPlace'
 import { countryFlag } from '@/components/map/geocode'
 import { getDaysUntil, formatDate, formatShortDate, getTripProgress, getTripStatus, formatTime } from '@/utils/dateUtils'
-import { sumExpenses } from '@/utils/currency'
+import { sumExpenses, getRate } from '@/utils/currency'
 import { findInProgressActivity, findNextUpcomingActivity, localDateStr, isActivityDone } from '@/utils/itinerary'
 import { findNextFlight, deriveFlightStatus } from '@/utils/flight'
 import { findActiveOrNextHotel } from '@/utils/hotel'
@@ -640,6 +641,13 @@ export default function Dashboard() {
         </motion.div>
       )}
 
+      {/* Time Zone + Currency widgets */}
+      {!inLobby && (
+        <motion.div variants={itemVariants}>
+          <TimeZoneCurrencyWidgets now={now} />
+        </motion.div>
+      )}
+
       {/* Quick Actions — wrapped in Card for consistency with other sections */}
       <motion.div variants={itemVariants}>
         <Card>
@@ -722,6 +730,168 @@ export default function Dashboard() {
         initialName={settings.travelerName}
       />
     </motion.div>
+  )
+}
+
+const DEST_TIMEZONES: [string[], string][] = [
+  [['japan', 'tokyo', 'osaka', 'kyoto', 'hiroshima'], 'Asia/Tokyo'],
+  [['korea', 'seoul', 'busan'], 'Asia/Seoul'],
+  [['thailand', 'bangkok', 'phuket', 'chiang mai', 'pattaya'], 'Asia/Bangkok'],
+  [['hong kong', 'hk'], 'Asia/Hong_Kong'],
+  [['singapore'], 'Asia/Singapore'],
+  [['taiwan', 'taipei'], 'Asia/Taipei'],
+  [['macau'], 'Asia/Macau'],
+  [['vietnam', 'hanoi', 'ho chi minh', 'da nang', 'hoi an'], 'Asia/Ho_Chi_Minh'],
+  [['indonesia', 'bali', 'jakarta', 'lombok', 'komodo'], 'Asia/Makassar'],
+  [['malaysia', 'kuala lumpur', 'kl', 'penang', 'kota kinabalu'], 'Asia/Kuala_Lumpur'],
+  [['cambodia', 'phnom penh', 'siem reap', 'angkor'], 'Asia/Phnom_Penh'],
+  [['china', 'beijing', 'shanghai', 'guangzhou', 'shenzhen'], 'Asia/Shanghai'],
+  [['maldives'], 'Indian/Maldives'],
+  [['dubai', 'uae', 'abu dhabi'], 'Asia/Dubai'],
+  [['france', 'paris'], 'Europe/Paris'],
+  [['spain', 'madrid', 'barcelona'], 'Europe/Madrid'],
+  [['italy', 'rome', 'milan', 'venice', 'florence'], 'Europe/Rome'],
+  [['uk', 'london', 'england', 'britain'], 'Europe/London'],
+  [['australia', 'sydney', 'melbourne', 'brisbane'], 'Australia/Sydney'],
+  [['usa', 'new york', 'los angeles', 'chicago', 'miami'], 'America/New_York'],
+  [['philippines', 'manila', 'cebu', 'davao', 'palawan', 'boracay', 'siargao', 'bohol', 'iloilo', 'baguio'], 'Asia/Manila'],
+]
+
+function getDestTimezone(destination: string): string | null {
+  const lower = destination.toLowerCase()
+  for (const [keywords, tz] of DEST_TIMEZONES) {
+    if (keywords.some(k => lower.includes(k))) return tz
+  }
+  return null
+}
+
+const DEST_CURRENCIES: [string[], string][] = [
+  [['japan', 'tokyo', 'osaka', 'kyoto'], 'JPY'],
+  [['korea', 'seoul'], 'KRW'],
+  [['thailand', 'bangkok', 'phuket'], 'THB'],
+  [['hong kong', 'hk'], 'HKD'],
+  [['singapore'], 'SGD'],
+  [['taiwan', 'taipei'], 'TWD'],
+  [['macau'], 'MOP'],
+  [['vietnam', 'hanoi', 'ho chi minh'], 'VND'],
+  [['indonesia', 'bali', 'jakarta'], 'IDR'],
+  [['malaysia', 'kuala lumpur'], 'MYR'],
+  [['cambodia', 'siem reap'], 'USD'],
+  [['china', 'beijing', 'shanghai'], 'CNY'],
+  [['maldives'], 'MVR'],
+  [['dubai', 'uae', 'abu dhabi'], 'AED'],
+  [['france', 'paris', 'spain', 'madrid', 'italy', 'rome', 'europe'], 'EUR'],
+  [['uk', 'london'], 'GBP'],
+  [['australia', 'sydney'], 'AUD'],
+  [['usa', 'new york', 'los angeles'], 'USD'],
+  [['philippines', 'manila', 'cebu', 'davao', 'palawan', 'boracay'], 'PHP'],
+]
+
+function getDestCurrency(destination: string): string | null {
+  const lower = destination.toLowerCase()
+  for (const [keywords, cur] of DEST_CURRENCIES) {
+    if (keywords.some(k => lower.includes(k))) return cur
+  }
+  return null
+}
+
+function TimeZoneCurrencyWidgets({ now }: { now: Date }) {
+  const { trip } = useTrip()
+  const dest = trip.tripInfo.destination
+  const home = trip.settings.homeCurrency
+  const destTz = getDestTimezone(dest)
+  const destCurrency = getDestCurrency(dest) ?? (trip.currencyRates[0]?.to ?? null)
+
+  const [amount, setAmount] = useState('')
+
+  const homeTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+  const homeTzName = Intl.DateTimeFormat().resolvedOptions().timeZone.replace('_', ' ').split('/').pop() ?? 'Home'
+
+  const destTime = destTz
+    ? now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: destTz })
+    : null
+  const destTzName = destTz ? destTz.split('/').pop()?.replace(/_/g, ' ') ?? dest : null
+
+  const diffHours = destTz ? (() => {
+    const home = new Date(now.toLocaleString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }))
+    const d = new Date(now.toLocaleString('en-US', { timeZone: destTz }))
+    const diff = Math.round((d.getTime() - home.getTime()) / 3600000)
+    return diff
+  })() : null
+
+  const rate = destCurrency && destCurrency !== home
+    ? getRate(trip.currencyRates, home, destCurrency)
+    : null
+  const converted = rate && amount ? (parseFloat(amount) * rate).toFixed(2) : null
+
+  if (!destTz && !rate) return null
+
+  return (
+    <div className="space-y-3">
+      {/* Time Zone widget */}
+      {destTz && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Clock className="h-4 w-4 text-blue-600" />
+              <span className="text-sm font-semibold">Time Zones</span>
+              {diffHours !== null && diffHours !== 0 && (
+                <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-semibold ml-auto',
+                  Math.abs(diffHours) >= 4 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-muted text-muted-foreground'
+                )}>
+                  {diffHours > 0 ? '+' : ''}{diffHours}h
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-muted rounded-xl p-3">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">🏠 Home</p>
+                <p className="text-xl font-bold tabular-nums">{homeTime}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{homeTzName}</p>
+              </div>
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-3">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">✈️ {dest.split(',')[0]}</p>
+                <p className="text-xl font-bold tabular-nums text-primary">{destTime}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{destTzName}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Currency quick-calc */}
+      {rate && destCurrency && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <ArrowLeftRight className="h-4 w-4 text-emerald-600" />
+              <span className="text-sm font-semibold">Quick Convert</span>
+              <span className="text-xs text-muted-foreground ml-auto">1 {home} = {rate.toFixed(4)} {destCurrency}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{home}</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={e => setAmount(e.target.value)}
+                  placeholder="0"
+                  className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-border bg-muted text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                />
+              </div>
+              <ArrowLeftRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="flex-1 relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{destCurrency}</span>
+                <div className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 text-sm font-mono font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
+                  {converted ?? '—'}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   )
 }
 

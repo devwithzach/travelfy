@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plane, Plus, Edit2, Trash2, ArrowRight, Clock, MapPin } from 'lucide-react'
+import { Plane, Plus, Edit2, Trash2, ArrowRight, Clock, MapPin, Radio } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import type { Flight } from '@/types'
 import PageHeader from '@/components/common/PageHeader'
@@ -202,6 +202,30 @@ export default function Flights() {
                       <div className="mt-2 pt-2 border-t text-xs text-muted-foreground">
                         <p>✈ {flight.fromAirport}{flight.fromTerminal ? `, ${flight.fromTerminal}` : ''}</p>
                         {flight.toAirport && <p>🛬 {flight.toAirport}{flight.toTerminal ? `, ${flight.toTerminal}` : ''}</p>}
+                      </div>
+                    )}
+
+                    {/* Live tracking */}
+                    {flight.flightNumber && (
+                      <div className="mt-2 pt-2 border-t flex gap-2">
+                        <a
+                          href={`https://www.flightaware.com/live/flight/${flight.flightNumber.replace(/\s/g, '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs font-semibold hover:bg-blue-100 active:scale-95 transition-all"
+                        >
+                          <Radio className="h-3 w-3" />
+                          FlightAware
+                        </a>
+                        <a
+                          href={`https://www.flightradar24.com/${flight.flightNumber.replace(/\s/g, '')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-xs font-semibold hover:bg-orange-100 active:scale-95 transition-all"
+                        >
+                          <Radio className="h-3 w-3" />
+                          Radar24
+                        </a>
                       </div>
                     )}
                   </CardContent>

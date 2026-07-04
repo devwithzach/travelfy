@@ -27,8 +27,10 @@ import Weather from '@/pages/Weather'
 import Advisories from '@/pages/Advisories'
 import Phrasebook from '@/pages/Phrasebook'
 import Connectivity from '@/pages/Connectivity'
+import CountryInfo from '@/pages/CountryInfo'
 import Photos from '@/pages/Photos'
 import Stats from '@/pages/Stats'
+import Insurance from '@/pages/Insurance'
 import Landing from '@/pages/Landing'
 import InstallPrompt from '@/components/common/InstallPrompt'
 import PWAUpdatePrompt from '@/components/common/PWAUpdatePrompt'
@@ -95,6 +97,8 @@ function AppRoutes() {
           <Route path="/map" element={<MapExplorer />} />
           <Route path="/photos" element={<Photos />} />
           <Route path="/stats" element={<Stats />} />
+          <Route path="/insurance" element={<Insurance />} />
+          <Route path="/country-info" element={<CountryInfo />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

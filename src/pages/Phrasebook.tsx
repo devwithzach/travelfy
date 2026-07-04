@@ -2,9 +2,11 @@ import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BookOpen, Search, Copy, Check, X } from 'lucide-react'
 import PageHeader from '@/components/common/PageHeader'
+import { useTrip } from '@/contexts/TripContext'
 import { cn } from '@/utils/cn'
 
 type Dialect = 'tagalog' | 'bisaya' | 'ilocano' | 'kapampangan' | 'waray' | 'hiligaynon'
+type IntlLanguage = 'japanese' | 'korean' | 'thai' | 'mandarin' | 'spanish' | 'french' | 'indonesian' | 'vietnamese' | 'arabic'
 type Category = 'greetings' | 'emergency' | 'food' | 'transport' | 'shopping' | 'directions' | 'numbers' | 'common'
 
 interface Phrase {
@@ -266,14 +268,237 @@ const PHRASES: Record<Dialect, Phrase[]> = {
   ],
 }
 
+const INTL_LANGUAGES: { id: IntlLanguage; label: string; region: string; emoji: string }[] = [
+  { id: 'japanese',   label: 'Japanese',   region: 'Japan',           emoji: '🇯🇵' },
+  { id: 'korean',     label: 'Korean',     region: 'South Korea',     emoji: '🇰🇷' },
+  { id: 'thai',       label: 'Thai',       region: 'Thailand',        emoji: '🇹🇭' },
+  { id: 'mandarin',   label: 'Mandarin',   region: 'China, Taiwan, HK',emoji: '🇨🇳' },
+  { id: 'spanish',    label: 'Spanish',    region: 'Spain, LatAm',    emoji: '🇪🇸' },
+  { id: 'french',     label: 'French',     region: 'France, Europe',  emoji: '🇫🇷' },
+  { id: 'indonesian', label: 'Indonesian', region: 'Indonesia, Bali', emoji: '🇮🇩' },
+  { id: 'vietnamese', label: 'Vietnamese', region: 'Vietnam',         emoji: '🇻🇳' },
+  { id: 'arabic',     label: 'Arabic',     region: 'UAE, Middle East',emoji: '🇦🇪' },
+]
+
+const INTL_PHRASES: Record<IntlLanguage, Phrase[]> = {
+  japanese: [
+    { english: 'Hello',               phrase: 'Konnichiwa (こんにちは)',    pronunciation: 'kon-NEE-chee-wah',    category: 'greetings' },
+    { english: 'Good morning',        phrase: 'Ohayou gozaimasu (おはようございます)', pronunciation: 'oh-ha-YO go-ZAI-mas', category: 'greetings' },
+    { english: 'Good evening',        phrase: 'Konbanwa (こんばんは)',       pronunciation: 'kon-BAN-wah',          category: 'greetings' },
+    { english: 'Thank you',           phrase: 'Arigatou gozaimasu (ありがとうございます)', pronunciation: 'a-ree-GA-to go-ZAI-mas', category: 'greetings' },
+    { english: 'Goodbye',             phrase: 'Sayounara (さようなら)',      pronunciation: 'sa-YO-na-ra',          category: 'greetings' },
+    { english: 'Yes / No',            phrase: 'Hai / Iie (はい / いいえ)',  pronunciation: 'hai / ee-EH',          category: 'common' },
+    { english: 'Please',              phrase: 'Onegaishimasu (おねがいします)', pronunciation: 'o-ne-GAI-shi-mas',  category: 'common' },
+    { english: 'Sorry / Excuse me',   phrase: 'Sumimasen (すみません)',      pronunciation: 'su-mee-MA-sen',        category: 'common' },
+    { english: 'I don\'t understand', phrase: 'Wakarimasen (わかりません)',  pronunciation: 'wa-ka-ree-MA-sen',     category: 'common' },
+    { english: 'How much?',           phrase: 'Ikura desu ka? (いくらですか)', pronunciation: 'ee-KOO-ra des-KA',  category: 'common' },
+    { english: 'Where is...?',        phrase: '...wa doko desu ka? (...はどこですか)', pronunciation: 'wa DOH-ko des-KA', category: 'common' },
+    { english: 'Help!',               phrase: 'Tasukete! (たすけて)',        pronunciation: 'ta-su-KE-te',          category: 'emergency' },
+    { english: 'Call the police!',    phrase: 'Keisatsu wo yonde! (警察を呼んで)', pronunciation: 'KAY-sa-tsu wo YON-de', category: 'emergency' },
+    { english: 'I need a doctor',     phrase: 'Isha ga hitsuyou desu (医者が必要です)', pronunciation: 'EE-sha ga hit-SU-yo des', category: 'emergency' },
+    { english: 'Delicious!',          phrase: 'Oishii! (おいしい)',          pronunciation: 'oh-EE-shee',           category: 'food' },
+    { english: 'Water please',        phrase: 'Omizu kudasai (お水ください)', pronunciation: 'oh-MEE-zoo ku-DA-sai', category: 'food' },
+    { english: 'The bill please',     phrase: 'Okaikei onegaishimasu (お会計おねがいします)', pronunciation: 'oh-KAI-kay o-ne-GAI-shi-mas', category: 'food' },
+    { english: 'Train / Subway',      phrase: 'Densha / Chikatetsu (電車 / 地下鉄)', pronunciation: 'DEN-sha / chee-ka-TET-su', category: 'transport' },
+    { english: 'Taxi',                phrase: 'Takushii (タクシー)',         pronunciation: 'ta-KU-shee',           category: 'transport' },
+    { english: 'Left / Right',        phrase: 'Hidari / Migi (左 / 右)',    pronunciation: 'hee-DA-ree / MEE-gee',  category: 'directions' },
+    { english: 'Straight ahead',      phrase: 'Massugu (まっすぐ)',          pronunciation: 'mas-SU-gu',            category: 'directions' },
+    { english: 'Too expensive',       phrase: 'Takai desu (高いです)',       pronunciation: 'ta-KAI des',           category: 'shopping' },
+    { english: 'One / Two / Three',   phrase: 'Ichi / Ni / San (一/二/三)', pronunciation: 'EE-chee / nee / san',  category: 'numbers' },
+  ],
+  korean: [
+    { english: 'Hello',               phrase: 'Annyeonghaseyo (안녕하세요)',  pronunciation: 'an-NYONG-ha-se-yo',    category: 'greetings' },
+    { english: 'Good morning',        phrase: 'Annyeong (안녕)',              pronunciation: 'an-NYONG',             category: 'greetings' },
+    { english: 'Thank you',           phrase: 'Gamsahamnida (감사합니다)',    pronunciation: 'gam-SA-ham-nee-da',    category: 'greetings' },
+    { english: 'You\'re welcome',     phrase: 'Cheonmaneyo (천만에요)',       pronunciation: 'chon-MAN-eh-yo',       category: 'greetings' },
+    { english: 'Goodbye',             phrase: 'Annyeonghi gaseyo (안녕히 가세요)', pronunciation: 'an-NYONG-hee ga-SE-yo', category: 'greetings' },
+    { english: 'Yes / No',            phrase: 'Ne / Aniyo (네 / 아니요)',    pronunciation: 'neh / a-NEE-yo',       category: 'common' },
+    { english: 'Please',              phrase: 'Juseyo (주세요)',              pronunciation: 'ju-SE-yo',             category: 'common' },
+    { english: 'Sorry',               phrase: 'Joesonghamnida (죄송합니다)', pronunciation: 'jweh-SONG-ham-nee-da', category: 'common' },
+    { english: 'How much?',           phrase: 'Eolmayeyo? (얼마예요?)',      pronunciation: 'OL-ma-ye-yo',          category: 'common' },
+    { english: 'Where is...?',        phrase: '...eodi isseoyo? (...어디 있어요?)', pronunciation: 'OH-dee ee-ssoh-yo', category: 'common' },
+    { english: 'Help!',               phrase: 'Dowa juseyo! (도와주세요)',    pronunciation: 'DO-wa ju-SE-yo',       category: 'emergency' },
+    { english: 'Call police!',        phrase: 'Gyeongchal bulleo juseyo! (경찰 불러주세요)', pronunciation: 'GYONG-chal bul-LO ju-SE-yo', category: 'emergency' },
+    { english: 'I need a doctor',     phrase: 'Uisa ga piryohaeyo (의사가 필요해요)', pronunciation: 'EE-sa ga pil-YO-heh-yo', category: 'emergency' },
+    { english: 'Delicious!',          phrase: 'Masisseoyo! (맛있어요)',       pronunciation: 'ma-SHEE-ssoh-yo',      category: 'food' },
+    { english: 'Water please',        phrase: 'Mul juseyo (물 주세요)',       pronunciation: 'mul ju-SE-yo',         category: 'food' },
+    { english: 'Bill please',         phrase: 'Gyesanseo juseyo (계산서 주세요)', pronunciation: 'GYE-san-soh ju-SE-yo', category: 'food' },
+    { english: 'Subway / Bus',        phrase: 'Jihacheo / Beoseu (지하철 / 버스)', pronunciation: 'jee-ha-CHOL / BOH-seu', category: 'transport' },
+    { english: 'Taxi',                phrase: 'Taeksi (택시)',               pronunciation: 'TAEK-shee',            category: 'transport' },
+    { english: 'Left / Right',        phrase: 'Waejeok / Oreunjjok (왼쪽 / 오른쪽)', pronunciation: 'WEN-jjok / O-reun-jjok', category: 'directions' },
+    { english: 'Too expensive',       phrase: 'Neomu bissayo (너무 비싸요)',  pronunciation: 'NO-mu bi-SSA-yo',      category: 'shopping' },
+    { english: 'One / Two / Three',   phrase: 'Il / I / Sam (일 / 이 / 삼)', pronunciation: 'il / ee / sam',        category: 'numbers' },
+  ],
+  thai: [
+    { english: 'Hello',               phrase: 'Sawasdee (สวัสดี)',           pronunciation: 'sa-WAT-dee',           category: 'greetings' },
+    { english: 'Thank you',           phrase: 'Khop khun (ขอบคุณ)',          pronunciation: 'KHOP-khun',            category: 'greetings' },
+    { english: 'You\'re welcome',     phrase: 'Yin dee (ยินดี)',              pronunciation: 'YIN-dee',              category: 'greetings' },
+    { english: 'Goodbye',             phrase: 'Laa gorn (ลาก่อน)',           pronunciation: 'LAH-gon',              category: 'greetings' },
+    { english: 'Yes / No',            phrase: 'Chai / Mai (ใช่ / ไม่)',      pronunciation: 'chai / mai',           category: 'common' },
+    { english: 'Please',              phrase: 'Karuna (กรุณา)',               pronunciation: 'ka-RU-na',             category: 'common' },
+    { english: 'Sorry',               phrase: 'Khaw thot (ขอโทษ)',           pronunciation: 'KHAW-tot',             category: 'common' },
+    { english: 'How much?',           phrase: 'Tao rai? (เท่าไหร่)',          pronunciation: 'TAO-rai',              category: 'common' },
+    { english: 'Where is...?',        phrase: '...yoo tee nai? (...อยู่ที่ไหน)', pronunciation: 'yoo TEE-nai',      category: 'common' },
+    { english: 'Help!',               phrase: 'Chuay duay! (ช่วยด้วย)',       pronunciation: 'CHOO-ay duay',         category: 'emergency' },
+    { english: 'Call police!',        phrase: 'Reak tam ruat! (เรียกตำรวจ)', pronunciation: 'REAK tam-RUAT',        category: 'emergency' },
+    { english: 'I need a doctor',     phrase: 'Tong gaan mor (ต้องการหมอ)',  pronunciation: 'TONG-gaan mor',        category: 'emergency' },
+    { english: 'Delicious!',          phrase: 'Aroy mak! (อร่อยมาก)',        pronunciation: 'a-ROY mak',            category: 'food' },
+    { english: 'Water please',        phrase: 'Kho naam (ขอน้ำ)',             pronunciation: 'KHAW naam',            category: 'food' },
+    { english: 'Bill please',         phrase: 'Kep ngoen duay (เก็บเงินด้วย)', pronunciation: 'KEPH-ngern duay',  category: 'food' },
+    { english: 'Tuk-tuk / Taxi',      phrase: 'Tuk-tuk / Taek-see (ตุ๊กตุ๊ก / แท็กซี่)', pronunciation: 'TUK-tuk / TAEK-see', category: 'transport' },
+    { english: 'Left / Right',        phrase: 'Saai / Kwaa (ซ้าย / ขวา)',   pronunciation: 'saai / kwaa',          category: 'directions' },
+    { english: 'Too expensive',       phrase: 'Phaeng mak (แพงมาก)',         pronunciation: 'PHANG mak',            category: 'shopping' },
+    { english: 'Can you discount?',   phrase: 'Lot raakha dai mai? (ลดราคาได้ไหม)', pronunciation: 'LOT raa-KHA dai mai', category: 'shopping' },
+    { english: 'One / Two / Three',   phrase: 'Neung / Song / Sam (หนึ่ง / สอง / สาม)', pronunciation: 'NUENG / song / sam', category: 'numbers' },
+  ],
+  mandarin: [
+    { english: 'Hello',               phrase: 'Nǐ hǎo (你好)',               pronunciation: 'nee HOW',              category: 'greetings' },
+    { english: 'Good morning',        phrase: 'Zǎo shang hǎo (早上好)',      pronunciation: 'ZAO shang HOW',        category: 'greetings' },
+    { english: 'Thank you',           phrase: 'Xièxiè (谢谢)',               pronunciation: 'SHYEH-shyeh',          category: 'greetings' },
+    { english: 'You\'re welcome',     phrase: 'Bú kèqi (不客气)',             pronunciation: 'boo KUH-chee',         category: 'greetings' },
+    { english: 'Goodbye',             phrase: 'Zàijiàn (再见)',               pronunciation: 'ZAI-jyen',             category: 'greetings' },
+    { english: 'Yes / No',            phrase: 'Shì / Bù shì (是 / 不是)',    pronunciation: 'shir / boo shir',      category: 'common' },
+    { english: 'Please',              phrase: 'Qǐng (请)',                    pronunciation: 'ching',                category: 'common' },
+    { english: 'Sorry',               phrase: 'Duìbuqǐ (对不起)',             pronunciation: 'DWAY-boo-chee',        category: 'common' },
+    { english: 'How much?',           phrase: 'Duōshǎo qián? (多少钱)',       pronunciation: 'dwo-SHAO chyen',       category: 'common' },
+    { english: 'Where is...?',        phrase: '...zài nǎlǐ? (...在哪里)',    pronunciation: 'ZAI na-lee',           category: 'common' },
+    { english: 'Help!',               phrase: 'Jiùmìng! (救命)',              pronunciation: 'JYO-ming',             category: 'emergency' },
+    { english: 'Call police!',        phrase: 'Jiào jǐngchá! (叫警察)',       pronunciation: 'JYAO jing-CHA',        category: 'emergency' },
+    { english: 'I need a doctor',     phrase: 'Wǒ xūyào yīshēng (我需要医生)', pronunciation: 'WOR shoo-YAO ee-SHUNG', category: 'emergency' },
+    { english: 'Delicious!',          phrase: 'Hǎo chī! (好吃)',              pronunciation: 'how CHIR',             category: 'food' },
+    { english: 'Water please',        phrase: 'Qǐng lái shuǐ (请来水)',       pronunciation: 'ching LY shway',       category: 'food' },
+    { english: 'Bill please',         phrase: 'Mǎidān (买单)',                pronunciation: 'my-DAN',               category: 'food' },
+    { english: 'Subway / Taxi',       phrase: 'Dìtiě / Chūzūchē (地铁 / 出租车)', pronunciation: 'dee-TYEH / choo-ZOO-chuh', category: 'transport' },
+    { english: 'Left / Right',        phrase: 'Zuǒ / Yòu (左 / 右)',         pronunciation: 'zwoh / yo',            category: 'directions' },
+    { english: 'Too expensive',       phrase: 'Tài guì le (太贵了)',          pronunciation: 'ty GWAY luh',          category: 'shopping' },
+    { english: 'One / Two / Three',   phrase: 'Yī / Èr / Sān (一 / 二 / 三)', pronunciation: 'ee / ar / san',       category: 'numbers' },
+  ],
+  spanish: [
+    { english: 'Hello',               phrase: 'Hola',                        pronunciation: 'OH-la',                category: 'greetings' },
+    { english: 'Good morning',        phrase: 'Buenos días',                 pronunciation: 'BWEH-nos DEE-as',      category: 'greetings' },
+    { english: 'Good evening',        phrase: 'Buenas noches',               pronunciation: 'BWEH-nas NO-ches',     category: 'greetings' },
+    { english: 'Thank you',           phrase: 'Gracias',                     pronunciation: 'GRA-syas',             category: 'greetings' },
+    { english: 'Goodbye',             phrase: 'Adiós / Hasta luego',         pronunciation: 'a-DYOS / AS-ta LWEH-go', category: 'greetings' },
+    { english: 'Yes / No',            phrase: 'Sí / No',                     pronunciation: 'see / no',             category: 'common' },
+    { english: 'Please',              phrase: 'Por favor',                   pronunciation: 'por fa-VOR',           category: 'common' },
+    { english: 'Sorry / Excuse me',   phrase: 'Lo siento / Perdón',          pronunciation: 'lo SYEN-to / per-DON', category: 'common' },
+    { english: 'How much?',           phrase: '¿Cuánto cuesta?',             pronunciation: 'KWAN-to KWES-ta',      category: 'common' },
+    { english: 'Where is...?',        phrase: '¿Dónde está...?',             pronunciation: 'DON-de es-TA',         category: 'common' },
+    { english: 'Help!',               phrase: '¡Socorro! / ¡Ayuda!',         pronunciation: 'so-KOR-ro / a-YU-da',  category: 'emergency' },
+    { english: 'Call the police!',    phrase: '¡Llame a la policía!',        pronunciation: 'YA-me a la po-lee-SEE-a', category: 'emergency' },
+    { english: 'I need a doctor',     phrase: 'Necesito un médico',          pronunciation: 'ne-se-SEE-to un MEH-dee-ko', category: 'emergency' },
+    { english: 'Delicious!',          phrase: '¡Delicioso!',                 pronunciation: 'de-lee-SYOH-so',       category: 'food' },
+    { english: 'Water please',        phrase: 'Agua por favor',              pronunciation: 'A-gwa por fa-VOR',     category: 'food' },
+    { english: 'Bill please',         phrase: 'La cuenta por favor',         pronunciation: 'la KWEN-ta por fa-VOR', category: 'food' },
+    { english: 'Left / Right',        phrase: 'Izquierda / Derecha',         pronunciation: 'iz-KYER-da / de-REH-cha', category: 'directions' },
+    { english: 'Straight ahead',      phrase: 'Todo recto',                  pronunciation: 'TOH-do REK-to',        category: 'directions' },
+    { english: 'Too expensive',       phrase: 'Es muy caro',                 pronunciation: 'es muy KA-ro',         category: 'shopping' },
+    { english: 'One / Two / Three',   phrase: 'Uno / Dos / Tres',            pronunciation: 'OO-no / dos / tres',   category: 'numbers' },
+  ],
+  french: [
+    { english: 'Hello',               phrase: 'Bonjour',                     pronunciation: 'bon-ZHOOR',            category: 'greetings' },
+    { english: 'Good evening',        phrase: 'Bonsoir',                     pronunciation: 'bon-SWAAR',            category: 'greetings' },
+    { english: 'Thank you',           phrase: 'Merci',                       pronunciation: 'mer-SEE',              category: 'greetings' },
+    { english: 'You\'re welcome',     phrase: 'De rien',                     pronunciation: 'duh RYEN',             category: 'greetings' },
+    { english: 'Goodbye',             phrase: 'Au revoir',                   pronunciation: 'oh ruh-VWAR',          category: 'greetings' },
+    { english: 'Yes / No',            phrase: 'Oui / Non',                   pronunciation: 'wee / non',            category: 'common' },
+    { english: 'Please',              phrase: 'S\'il vous plaît',            pronunciation: 'seel voo PLEH',        category: 'common' },
+    { english: 'Sorry / Excuse me',   phrase: 'Pardon / Excusez-moi',        pronunciation: 'par-DON / ex-koo-ZAY mwa', category: 'common' },
+    { english: 'How much?',           phrase: 'Combien ça coûte?',           pronunciation: 'kom-BYEN sa koot',     category: 'common' },
+    { english: 'Where is...?',        phrase: 'Où est...?',                  pronunciation: 'oo eh',                category: 'common' },
+    { english: 'Help!',               phrase: 'Au secours!',                 pronunciation: 'oh suh-KOOR',          category: 'emergency' },
+    { english: 'Call the police!',    phrase: 'Appelez la police!',          pronunciation: 'ap-LAY la po-LEES',    category: 'emergency' },
+    { english: 'I need a doctor',     phrase: 'J\'ai besoin d\'un médecin',  pronunciation: 'zhay buh-ZWAN dun med-SAN', category: 'emergency' },
+    { english: 'Delicious!',          phrase: 'Délicieux!',                  pronunciation: 'deh-lee-SYUH',         category: 'food' },
+    { english: 'Water please',        phrase: 'De l\'eau s\'il vous plaît',  pronunciation: 'duh lo seel voo PLEH', category: 'food' },
+    { english: 'Bill please',         phrase: 'L\'addition s\'il vous plaît', pronunciation: 'la-dee-SYON seel voo PLEH', category: 'food' },
+    { english: 'Metro / Taxi',        phrase: 'Métro / Taxi',                pronunciation: 'MEH-tro / tak-SEE',    category: 'transport' },
+    { english: 'Left / Right',        phrase: 'Gauche / Droite',             pronunciation: 'gohsh / drwat',        category: 'directions' },
+    { english: 'Too expensive',       phrase: 'C\'est trop cher',            pronunciation: 'say tro shair',        category: 'shopping' },
+    { english: 'One / Two / Three',   phrase: 'Un / Deux / Trois',           pronunciation: 'un / duh / trwah',     category: 'numbers' },
+  ],
+  indonesian: [
+    { english: 'Hello',               phrase: 'Halo / Selamat',              pronunciation: 'HA-lo / se-LA-mat',    category: 'greetings' },
+    { english: 'Good morning',        phrase: 'Selamat pagi',                pronunciation: 'se-LA-mat PA-gee',     category: 'greetings' },
+    { english: 'Good afternoon',      phrase: 'Selamat siang',               pronunciation: 'se-LA-mat SYANG',      category: 'greetings' },
+    { english: 'Thank you',           phrase: 'Terima kasih',                pronunciation: 'te-REE-ma KA-see',     category: 'greetings' },
+    { english: 'You\'re welcome',     phrase: 'Sama-sama',                   pronunciation: 'SA-ma SA-ma',          category: 'greetings' },
+    { english: 'Goodbye',             phrase: 'Selamat tinggal',             pronunciation: 'se-LA-mat TING-gal',   category: 'greetings' },
+    { english: 'Yes / No',            phrase: 'Ya / Tidak',                  pronunciation: 'ya / TEE-dak',         category: 'common' },
+    { english: 'Please',              phrase: 'Tolong',                      pronunciation: 'TOH-long',             category: 'common' },
+    { english: 'Sorry',               phrase: 'Maaf',                        pronunciation: 'ma-AF',                category: 'common' },
+    { english: 'How much?',           phrase: 'Berapa harganya?',            pronunciation: 'be-RA-pa har-GA-nya',  category: 'common' },
+    { english: 'Where is...?',        phrase: 'Di mana...?',                 pronunciation: 'dee MA-na',            category: 'common' },
+    { english: 'Help!',               phrase: 'Tolong!',                     pronunciation: 'TOH-long',             category: 'emergency' },
+    { english: 'Call police!',        phrase: 'Panggil polisi!',             pronunciation: 'PANG-gil po-LEE-see',  category: 'emergency' },
+    { english: 'I need a doctor',     phrase: 'Saya butuh dokter',           pronunciation: 'SA-ya BOO-tuh DOK-ter', category: 'emergency' },
+    { english: 'Delicious!',          phrase: 'Enak!',                       pronunciation: 'EH-nak',               category: 'food' },
+    { english: 'Water please',        phrase: 'Air putih tolong',            pronunciation: 'a-EER POO-tih TOH-long', category: 'food' },
+    { english: 'Bill please',         phrase: 'Minta bon/nota',              pronunciation: 'MIN-ta bon',           category: 'food' },
+    { english: 'Ojek / Taxi / Gojek', phrase: 'Ojek / Taksi / Gojek',       pronunciation: 'OH-jek / TAK-see',     category: 'transport' },
+    { english: 'Left / Right',        phrase: 'Kiri / Kanan',                pronunciation: 'KEE-ree / KA-nan',     category: 'directions' },
+    { english: 'Too expensive',       phrase: 'Terlalu mahal',               pronunciation: 'ter-LA-lu ma-HAL',     category: 'shopping' },
+    { english: 'One / Two / Three',   phrase: 'Satu / Dua / Tiga',          pronunciation: 'SA-tu / DOO-a / TEE-ga', category: 'numbers' },
+  ],
+  vietnamese: [
+    { english: 'Hello',               phrase: 'Xin chào',                    pronunciation: 'sin CHOW',             category: 'greetings' },
+    { english: 'Good morning',        phrase: 'Chào buổi sáng',              pronunciation: 'CHOW bwoy SANG',       category: 'greetings' },
+    { english: 'Thank you',           phrase: 'Cảm ơn',                      pronunciation: 'GAM un',               category: 'greetings' },
+    { english: 'You\'re welcome',     phrase: 'Không có gì',                 pronunciation: 'khong KO zee',         category: 'greetings' },
+    { english: 'Goodbye',             phrase: 'Tạm biệt',                    pronunciation: 'tam BYet',             category: 'greetings' },
+    { english: 'Yes / No',            phrase: 'Vâng / Không',                pronunciation: 'vang / khong',         category: 'common' },
+    { english: 'Please',              phrase: 'Làm ơn',                      pronunciation: 'lam UN',               category: 'common' },
+    { english: 'Sorry',               phrase: 'Xin lỗi',                     pronunciation: 'sin LOY',              category: 'common' },
+    { english: 'How much?',           phrase: 'Bao nhiêu tiền?',             pronunciation: 'bao NYEW tyen',        category: 'common' },
+    { english: 'Where is...?',        phrase: '...ở đâu?',                   pronunciation: 'uh DOH',               category: 'common' },
+    { english: 'Help!',               phrase: 'Cứu tôi! / Giúp tôi!',       pronunciation: 'KU toy / ZUP toy',     category: 'emergency' },
+    { english: 'Call police!',        phrase: 'Gọi cảnh sát!',               pronunciation: 'GOY GANG sat',         category: 'emergency' },
+    { english: 'I need a doctor',     phrase: 'Tôi cần bác sĩ',              pronunciation: 'toy KAN bak SEE',      category: 'emergency' },
+    { english: 'Delicious!',          phrase: 'Ngon lắm!',                   pronunciation: 'ngon LAM', category: 'food' },
+    { english: 'Water please',        phrase: 'Cho tôi nước',                pronunciation: 'cho toy NOOK',         category: 'food' },
+    { english: 'Bill please',         phrase: 'Tính tiền',                   pronunciation: 'TING tyen',            category: 'food' },
+    { english: 'Grab / Taxi',         phrase: 'Xe Grab / Taxi',              pronunciation: 'se GRAB / TAK-see',    category: 'transport' },
+    { english: 'Left / Right',        phrase: 'Trái / Phải',                 pronunciation: 'chai / fai',           category: 'directions' },
+    { english: 'Too expensive',       phrase: 'Đắt quá',                     pronunciation: 'DAT kwa',              category: 'shopping' },
+    { english: 'One / Two / Three',   phrase: 'Một / Hai / Ba',              pronunciation: 'mote / hai / ba',      category: 'numbers' },
+  ],
+  arabic: [
+    { english: 'Hello / Peace be upon you', phrase: 'As-salamu alaykum (السلام عليكم)', pronunciation: 'as-SA-lam-u a-LAY-kum', category: 'greetings' },
+    { english: 'Hello (informal)',    phrase: 'Marhaba (مرحبا)',              pronunciation: 'MAR-ha-ba',            category: 'greetings' },
+    { english: 'Good morning',       phrase: 'Sabah al-khayr (صباح الخير)',  pronunciation: 'SA-bah al-KHAYR',     category: 'greetings' },
+    { english: 'Thank you',          phrase: 'Shukran (شكرا)',               pronunciation: 'SHUK-ran',             category: 'greetings' },
+    { english: 'Goodbye',            phrase: 'Ma\'a as-salamah (مع السلامة)', pronunciation: 'MA-a as-SA-la-ma',    category: 'greetings' },
+    { english: 'Yes / No',           phrase: 'Na\'am / La (نعم / لا)',        pronunciation: 'na-AM / la',           category: 'common' },
+    { english: 'Please',             phrase: 'Min fadlak (من فضلك)',          pronunciation: 'min FAD-lak',          category: 'common' },
+    { english: 'Sorry / Excuse me',  phrase: 'Aasif / Afwan (آسف / عفوا)',   pronunciation: 'AA-sif / AF-wan',      category: 'common' },
+    { english: 'How much?',          phrase: 'Bikam? (بكم)',                  pronunciation: 'bi-KAM',               category: 'common' },
+    { english: 'Where is...?',       phrase: 'Ayna...? (أين)',               pronunciation: 'AY-na',                category: 'common' },
+    { english: 'Help!',              phrase: 'Musaa\'ada! (مساعدة)',          pronunciation: 'mu-SA-a-da',           category: 'emergency' },
+    { english: 'Call police!',       phrase: 'Utrub ash-shurtah! (اتصل بالشرطة)', pronunciation: 'UT-rub ash-SHUR-ta', category: 'emergency' },
+    { english: 'I need a doctor',    phrase: 'Ahtaj tabib (أحتاج طبيب)',     pronunciation: 'ah-TAJ ta-BEEB',       category: 'emergency' },
+    { english: 'Delicious!',         phrase: 'Ladhidh! (لذيذ)',              pronunciation: 'la-DHEETH',            category: 'food' },
+    { english: 'Water please',       phrase: 'Maa\' min fadlak (ماء من فضلك)', pronunciation: 'MA-a min FAD-lak',  category: 'food' },
+    { english: 'Bill please',        phrase: 'Al-fattura min fadlak (الفاتورة)', pronunciation: 'al-fa-TOO-ra min FAD-lak', category: 'food' },
+    { english: 'Taxi / Metro',       phrase: 'Taksi / Metro (تاكسي / مترو)', pronunciation: 'TAK-see / MET-ro',    category: 'transport' },
+    { english: 'Left / Right',       phrase: 'Yasaar / Yameen (يسار / يمين)', pronunciation: 'ya-SAR / ya-MEEN',   category: 'directions' },
+    { english: 'Too expensive',      phrase: 'Ghali jiddan (غالي جداً)',     pronunciation: 'GHA-lee JID-dan',      category: 'shopping' },
+    { english: 'One / Two / Three',  phrase: 'Wahid / Ithnaan / Thalatha (١ / ٢ / ٣)', pronunciation: 'WA-hid / ith-NAAN / tha-LA-tha', category: 'numbers' },
+  ],
+}
+
 export default function Phrasebook() {
+  const { trip } = useTrip()
+  const isDomestic = trip.tripInfo.tripType === 'domestic'
+
+  const [mode, setMode] = useState<'ph' | 'intl'>(isDomestic ? 'ph' : 'intl')
   const [dialect, setDialect] = useState<Dialect>('tagalog')
+  const [intlLang, setIntlLang] = useState<IntlLanguage>('japanese')
   const [category, setCategory] = useState<Category | 'all'>('all')
   const [search, setSearch] = useState('')
   const [copied, setCopied] = useState<string | null>(null)
 
   const phrases = useMemo(() => {
-    let list = PHRASES[dialect]
+    let list: Phrase[] = mode === 'ph' ? PHRASES[dialect] : INTL_PHRASES[intlLang]
     if (category !== 'all') list = list.filter(p => p.category === category)
     if (search.trim()) {
       const q = search.toLowerCase()
@@ -283,7 +508,7 @@ export default function Phrasebook() {
       )
     }
     return list
-  }, [dialect, category, search])
+  }, [mode, dialect, intlLang, category, search])
 
   const grouped = useMemo(() => {
     if (category !== 'all' || search.trim()) return null
@@ -301,6 +526,7 @@ export default function Phrasebook() {
   }
 
   const currentDialect = DIALECTS.find(d => d.id === dialect)!
+  const currentIntlLang = INTL_LANGUAGES.find(l => l.id === intlLang)!
 
   return (
     <div>
@@ -311,24 +537,59 @@ export default function Phrasebook() {
         iconColor="text-violet-600"
       />
 
-      {/* Dialect selector */}
+      {/* Mode toggle */}
       <div className="px-4 mb-3">
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-          {DIALECTS.map(d => (
+        <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-muted">
+          {(['ph', 'intl'] as const).map(m => (
             <button
-              key={d.id}
-              onClick={() => { setDialect(d.id); setCategory('all'); setSearch('') }}
+              key={m}
+              onClick={() => { setMode(m); setCategory('all'); setSearch('') }}
               className={cn(
-                'flex flex-col items-center gap-1 px-3 py-2 rounded-2xl border text-center shrink-0 transition-all active:scale-95',
-                dialect === d.id
-                  ? 'bg-violet-500 border-violet-500 text-white shadow-sm'
-                  : 'bg-card border-border text-muted-foreground hover:border-violet-300'
+                'py-2 rounded-xl text-sm font-semibold transition-all',
+                mode === m ? 'bg-violet-500 text-white shadow-sm' : 'text-muted-foreground'
               )}
             >
-              <span className="text-base">{d.emoji}</span>
-              <span className="text-[11px] font-semibold leading-tight">{d.label}</span>
+              {m === 'ph' ? '🇵🇭 PH Dialects' : '🌏 World Languages'}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Language selector */}
+      <div className="px-4 mb-3">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {mode === 'ph'
+            ? DIALECTS.map(d => (
+                <button
+                  key={d.id}
+                  onClick={() => { setDialect(d.id); setCategory('all'); setSearch('') }}
+                  className={cn(
+                    'flex flex-col items-center gap-1 px-3 py-2 rounded-2xl border text-center shrink-0 transition-all active:scale-95',
+                    dialect === d.id
+                      ? 'bg-violet-500 border-violet-500 text-white shadow-sm'
+                      : 'bg-card border-border text-muted-foreground hover:border-violet-300'
+                  )}
+                >
+                  <span className="text-base">{d.emoji}</span>
+                  <span className="text-[11px] font-semibold leading-tight">{d.label}</span>
+                </button>
+              ))
+            : INTL_LANGUAGES.map(l => (
+                <button
+                  key={l.id}
+                  onClick={() => { setIntlLang(l.id); setCategory('all'); setSearch('') }}
+                  className={cn(
+                    'flex flex-col items-center gap-1 px-3 py-2 rounded-2xl border text-center shrink-0 transition-all active:scale-95',
+                    intlLang === l.id
+                      ? 'bg-violet-500 border-violet-500 text-white shadow-sm'
+                      : 'bg-card border-border text-muted-foreground hover:border-violet-300'
+                  )}
+                >
+                  <span className="text-base">{l.emoji}</span>
+                  <span className="text-[11px] font-semibold leading-tight">{l.label}</span>
+                </button>
+              ))
+          }
         </div>
       </div>
 
@@ -336,7 +597,7 @@ export default function Phrasebook() {
       <div className="px-4 mb-3">
         <div className="bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800 rounded-xl px-3 py-2">
           <p className="text-xs text-violet-700 dark:text-violet-400 font-medium">
-            📍 Spoken in: {currentDialect.region}
+            📍 {mode === 'ph' ? `Spoken in: ${currentDialect.region}` : `Spoken in: ${currentIntlLang.region}`}
           </p>
         </div>
       </div>
