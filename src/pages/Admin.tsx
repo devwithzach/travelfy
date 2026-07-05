@@ -217,7 +217,7 @@ function UserCard({ user, onRoleChange, updating }: UserCardProps) {
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export default function Admin() {
-  const { user, session } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
 
   const [myRole, setMyRole] = useState<string | null>(null)
@@ -242,47 +242,58 @@ export default function Admin() {
       })
   }, [user])
 
-  // ── 2. Fetch admin data ────────────────────────────────────────────────
+  // ── 2. Fetch admin data directly from Supabase ────────────────────────
   const fetchData = useCallback(async () => {
-    if (!session?.access_token) return
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/admin-users', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-      if (!res.ok) {
-        const msg = await res.text().catch(() => `HTTP ${res.status}`)
-        throw new Error(msg || `HTTP ${res.status}`)
+      const { data: profiles, error: profileErr } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (profileErr) throw new Error(profileErr.message)
+
+      const users: AdminUser[] = (profiles ?? []).map(p => ({
+        id: p.id,
+        email: p.email,
+        full_name: p.full_name,
+        role: p.role as UserRole,
+        trip_count: 0,
+        created_at: p.created_at,
+        last_sign_in_at: '',
+      }))
+
+      const oneWeekAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
+      const stats: AdminStats = {
+        total_users: users.length,
+        total_trips: 0,
+        operators: users.filter(u => u.role === 'operator').length,
+        admins: users.filter(u => u.role === 'admin').length,
+        new_this_week: users.filter(u => u.created_at > oneWeekAgo).length,
       }
-      const json: AdminResponse = await res.json()
-      setData(json)
+
+      setData({ users, stats })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data')
     } finally {
       setLoading(false)
     }
-  }, [session?.access_token])
+  }, [])
 
   useEffect(() => {
     if (myRole === 'admin') fetchData()
   }, [myRole, fetchData])
 
-  // ── 3. Change role ─────────────────────────────────────────────────────
+  // ── 3. Change role directly via Supabase (admin RLS policy allows it) ──
   const handleRoleChange = async (userId: string, newRole: UserRole) => {
-    if (!session?.access_token) return
     setUpdatingId(userId)
     try {
-      const res = await fetch('/api/admin-users', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ userId, role: newRole }),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      // Optimistic update
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({ role: newRole })
+        .eq('id', userId)
+      if (error) throw new Error(error.message)
       setData(prev => {
         if (!prev) return prev
         return {
@@ -290,8 +301,7 @@ export default function Admin() {
           users: prev.users.map(u => u.id === userId ? { ...u, role: newRole } : u),
         }
       })
-    } catch (err) {
-      // Surface inline error in a simple way — re-fetch to reset state
+    } catch {
       await fetchData()
     } finally {
       setUpdatingId(null)
