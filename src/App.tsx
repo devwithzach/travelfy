@@ -31,6 +31,10 @@ import CountryInfo from '@/pages/CountryInfo'
 import Photos from '@/pages/Photos'
 import Stats from '@/pages/Stats'
 import Insurance from '@/pages/Insurance'
+import Splitter from '@/pages/Splitter'
+import Journal from '@/pages/Journal'
+import TripExport from '@/pages/TripExport'
+import VisaTracker from '@/pages/VisaTracker'
 import Landing from '@/pages/Landing'
 import InstallPrompt from '@/components/common/InstallPrompt'
 import PWAUpdatePrompt from '@/components/common/PWAUpdatePrompt'
@@ -93,11 +97,15 @@ function AppRoutes() {
           <Route path="/currency" element={<Currency />} />
           <Route path="/emergency" element={<Emergency />} />
           <Route path="/notes" element={<Notes />} />
+          <Route path="/journal" element={<Journal />} />
           <Route path="/links" element={<QuickLinks />} />
           <Route path="/map" element={<MapExplorer />} />
           <Route path="/photos" element={<Photos />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/insurance" element={<Insurance />} />
+          <Route path="/splitter" element={<Splitter />} />
+          <Route path="/export" element={<TripExport />} />
+          <Route path="/visa-tracker" element={<VisaTracker />} />
           <Route path="/country-info" element={<CountryInfo />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />

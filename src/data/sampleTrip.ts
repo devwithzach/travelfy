@@ -648,6 +648,8 @@ export const sampleTrip: TripData = {
     { from: 'USD', to: 'PHP', rate: 58.50, updatedAt: '2026-06-01' },
   ],
 
+  journal: [],
+
   settings: {
     travelerName: 'Zach Campaner',
     profilePicture: '',
@@ -655,6 +657,8 @@ export const sampleTrip: TripData = {
     homeCurrency: 'PHP',
     language: 'en',
     totalBudget: 50000,
+    baggageLimitKg: 20,
+    travelers: ['Zach', 'Partner'],
   },
 
   tourNotes: [

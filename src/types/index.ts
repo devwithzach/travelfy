@@ -62,6 +62,18 @@ export interface ChecklistItem {
   label: string
   checked: boolean
   category: 'documents' | 'essentials' | 'electronics' | 'health' | 'clothing' | 'custom'
+  weightGrams?: number
+}
+
+export interface JournalEntry {
+  id: string
+  date: string        // YYYY-MM-DD
+  title: string
+  body: string
+  mood: 'amazing' | 'good' | 'okay' | 'tough' | 'rough'
+  weather: string     // freeform emoji/label e.g. "☀️ Sunny"
+  createdAt: string
+  updatedAt: string
 }
 
 export interface Expense {
@@ -155,6 +167,8 @@ export interface TripSettings {
   homeCurrency: string
   language: string
   totalBudget: number
+  baggageLimitKg: number        // for packing weight tracker, default 0 = not set
+  travelers: string[]           // names for group expense splitting
 }
 
 export interface TripSummary {
@@ -252,6 +266,7 @@ export interface TripData {
   passport: PassportInfo
   visas: VisaInfo[]
   currencyRates: CurrencyRate[]
+  journal: JournalEntry[]
   settings: TripSettings
   tourNotes: string[]
   restrictions: string[]

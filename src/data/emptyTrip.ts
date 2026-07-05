@@ -36,6 +36,7 @@ export function createEmptyTrip(id = `trip-${Date.now()}`): TripData {
     },
     visas: [],
     currencyRates: [],
+    journal: [],
     settings: {
       travelerName: '',
       profilePicture: '',
@@ -43,6 +44,8 @@ export function createEmptyTrip(id = `trip-${Date.now()}`): TripData {
       homeCurrency: 'PHP',
       language: 'en',
       totalBudget: 0,
+      baggageLimitKg: 0,
+      travelers: [],
     },
     tourNotes: [],
     restrictions: [],

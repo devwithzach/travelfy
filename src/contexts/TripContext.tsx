@@ -254,6 +254,7 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
       passport: source.passport,
       visas: [],
       currencyRates: [...source.currencyRates],
+      journal: [],
       lastUpdated: new Date().toISOString(),
     }
     await storageService.saveTrip(userId, cloned)

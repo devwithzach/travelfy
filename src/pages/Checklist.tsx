@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ListChecks, Plus, Trash2, Sparkles, X, Check } from 'lucide-react'
+import { ListChecks, Plus, Trash2, Sparkles, X, Check, Scale } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import type { ChecklistItem } from '@/types'
 import PageHeader from '@/components/common/PageHeader'
@@ -187,15 +187,28 @@ export default function Checklist() {
   const [filter, setFilter] = useState<string>('all')
   const [presetOpen, setPresetOpen] = useState(false)
   const [selectedPreset, setSelectedPreset] = useState<Preset | null>(null)
+  const [editingWeightId, setEditingWeightId] = useState<string | null>(null)
 
   const { checklist } = trip
   const checked = checklist.filter(c => c.checked).length
   const progress = checklist.length > 0 ? (checked / checklist.length) * 100 : 0
 
+  const baggageLimitKg = trip.settings.baggageLimitKg ?? 0
+  const totalWeightG = checklist.filter(c => c.checked).reduce((sum, c) => sum + (c.weightGrams ?? 0), 0)
+  const totalWeightKg = totalWeightG / 1000
+  const weightProgress = baggageLimitKg > 0 ? Math.min((totalWeightKg / baggageLimitKg) * 100, 100) : 0
+
   const toggle = (id: string) => {
     updateTrip(prev => ({
       ...prev,
       checklist: prev.checklist.map(c => c.id === id ? { ...c, checked: !c.checked } : c),
+    }))
+  }
+
+  const setWeight = (id: string, grams: number) => {
+    updateTrip(prev => ({
+      ...prev,
+      checklist: prev.checklist.map(c => c.id === id ? { ...c, weightGrams: grams || undefined } : c),
     }))
   }
 
@@ -272,6 +285,39 @@ export default function Checklist() {
                 ? '🎉 All packed! Ready to go!'
                 : `${checklist.length - checked} item${checklist.length - checked !== 1 ? 's' : ''} left to pack`}
             </p>
+
+            {/* Weight tracker — only shown when baggage limit is set or any item has a weight */}
+            {(baggageLimitKg > 0 || totalWeightG > 0) && (
+              <div className="mt-3 pt-3 border-t border-border">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold flex items-center gap-1.5">
+                    <Scale className="h-3.5 w-3.5 text-indigo-500" />
+                    Packed Weight
+                  </span>
+                  <span className={cn(
+                    'text-xs font-bold tabular-nums',
+                    baggageLimitKg > 0 && totalWeightKg > baggageLimitKg * 0.9 ? 'text-rose-600' : 'text-indigo-600'
+                  )}>
+                    {totalWeightKg.toFixed(2)} kg
+                    {baggageLimitKg > 0 && <span className="font-normal text-muted-foreground"> / {baggageLimitKg} kg</span>}
+                  </span>
+                </div>
+                {baggageLimitKg > 0 && (
+                  <>
+                    <Progress
+                      value={weightProgress}
+                      className={cn('h-2', weightProgress > 90 ? '[&>div]:bg-rose-500' : weightProgress > 75 ? '[&>div]:bg-amber-500' : '[&>div]:bg-indigo-500')}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {baggageLimitKg - totalWeightKg > 0
+                        ? `${(baggageLimitKg - totalWeightKg).toFixed(2)} kg remaining`
+                        : `⚠️ ${(totalWeightKg - baggageLimitKg).toFixed(2)} kg over limit!`
+                      }
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -374,6 +420,35 @@ export default function Checklist() {
                           )}>
                             {item.label}
                           </span>
+                          {/* Weight input — tap Scale icon to expand */}
+                          {editingWeightId === item.id ? (
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              autoFocus
+                              placeholder="g"
+                              defaultValue={item.weightGrams || ''}
+                              onBlur={e => {
+                                setWeight(item.id, parseFloat(e.target.value) || 0)
+                                setEditingWeightId(null)
+                              }}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter' || e.key === 'Escape') {
+                                  if (e.key === 'Enter') setWeight(item.id, parseFloat((e.target as HTMLInputElement).value) || 0)
+                                  setEditingWeightId(null)
+                                }
+                              }}
+                              className="w-16 text-xs text-right border border-indigo-300 rounded-lg px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-background"
+                            />
+                          ) : (
+                            <button
+                              onClick={() => setEditingWeightId(item.id)}
+                              className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-indigo-500 transition-colors px-1"
+                            >
+                              <Scale className="h-3 w-3" />
+                              {item.weightGrams ? `${item.weightGrams}g` : ''}
+                            </button>
+                          )}
                           <button
                             onClick={() => remove(item.id)}
                             className="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-all text-muted-foreground hover:opacity-100"

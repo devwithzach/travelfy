@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase'
 import type {
   TripData, TripSummary, Flight, Ferry, Bus, LocalTransport, Hotel, ItineraryDay, ItineraryActivity,
   ChecklistItem, Expense, Document, EmergencyContact, QuickLink,
-  Note, VisaInfo, CurrencyRate
+  Note, VisaInfo, CurrencyRate, JournalEntry
 } from '@/types'
 import { createEmptyTrip } from '@/data/emptyTrip'
 import {
@@ -10,6 +10,7 @@ import {
   checklistRowSchema, expenseRowSchema, documentRowSchema, contactRowSchema,
   linkRowSchema, noteRowSchema, visaRowSchema, rateRowSchema, passportRowSchema,
   busRowSchema, localTransportRowSchema, ferryRowSchema, tripRowSchema, tripSummaryRowSchema,
+  journalRowSchema,
 } from './schemas'
 
 // ── Mappers: validated DB row → app type ──────────────────
@@ -93,7 +94,12 @@ function mapDay(r: unknown): ItineraryDay {
 
 function mapChecklist(r: unknown): ChecklistItem {
   const v = checklistRowSchema.parse(r)
-  return { id: v.id, label: v.label, checked: v.checked, category: v.category }
+  return { id: v.id, label: v.label, checked: v.checked, category: v.category, weightGrams: v.weight_grams || undefined }
+}
+
+function mapJournal(r: unknown): JournalEntry {
+  const v = journalRowSchema.parse(r)
+  return { id: v.id, date: v.date, title: v.title, body: v.body, mood: v.mood, weather: v.weather, createdAt: v.created_at, updatedAt: v.updated_at }
 }
 
 function mapExpense(r: unknown): Expense {
@@ -181,6 +187,7 @@ async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripDa
     { data: passport },
     { data: visas },
     { data: rates },
+    { data: journal },
   ] = await Promise.all([
     supabase.from('flights').select('*').eq('trip_id', tripId).order('sort_order'),
     supabase.from('ferries').select('*').eq('trip_id', tripId).order('sort_order'),
@@ -197,6 +204,7 @@ async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripDa
     supabase.from('passport_info').select('*').eq('user_id', userId).maybeSingle(),
     supabase.from('visas').select('*').eq('trip_id', tripId),
     supabase.from('currency_rates').select('*').eq('user_id', userId),
+    supabase.from('journal_entries').select('*').eq('trip_id', tripId).order('date', { ascending: false }),
   ])
 
   return {
@@ -218,6 +226,8 @@ async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripDa
       homeCurrency: tripRow.home_currency,
       language: tripRow.language,
       totalBudget: tripRow.total_budget,
+      baggageLimitKg: tripRow.baggage_limit_kg,
+      travelers: tripRow.travelers,
     },
     tourNotes: tripRow.tour_notes,
     restrictions: tripRow.restrictions,
@@ -254,6 +264,7 @@ async function assembleTrip(userId: string, tripRowRaw: unknown): Promise<TripDa
       : createEmptyTrip().passport,
     visas: (visas ?? []).map(mapVisa),
     currencyRates: (rates ?? []).map(mapRate),
+    journal: (journal ?? []).map(mapJournal),
     lastUpdated: new Date().toISOString(),
   }
 }
@@ -387,6 +398,8 @@ export const storageService = {
       status: trip.tripInfo.status,
       trip_type: trip.tripInfo.tripType,
       total_budget: trip.settings.totalBudget,
+      baggage_limit_kg: trip.settings.baggageLimitKg,
+      travelers: trip.settings.travelers,
       home_currency: trip.settings.homeCurrency,
       traveler_name: trip.settings.travelerName,
       profile_picture: trip.settings.profilePicture,
@@ -455,7 +468,8 @@ export const storageService = {
       // Checklist
       syncTable('checklist_items', tripId, trip.checklist.map((c, i) => ({
         id: c.id, trip_id: tripId, user_id: userId,
-        label: c.label, checked: c.checked, category: c.category, sort_order: i,
+        label: c.label, checked: c.checked, category: c.category,
+        weight_grams: c.weightGrams ?? 0, sort_order: i,
       }))),
 
       // Expenses
@@ -535,6 +549,14 @@ export const storageService = {
         passport_type: trip.passport.passportType ?? '',
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' }),
+
+      // Journal entries
+      syncTable('journal_entries', tripId, trip.journal.map(j => ({
+        id: j.id, trip_id: tripId, user_id: userId,
+        date: j.date, title: j.title, body: j.body,
+        mood: j.mood, weather: j.weather,
+        created_at: j.createdAt, updated_at: j.updatedAt,
+      }))),
 
       // Itinerary days + activities (cascade delete handles activities)
       (async () => {

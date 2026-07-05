@@ -122,6 +122,18 @@ export const checklistRowSchema = z.object({
   label: str(),
   checked: bool(),
   category: z.enum(['documents', 'essentials', 'electronics', 'health', 'clothing', 'custom']).catch('custom'),
+  weight_grams: num(),
+})
+
+export const journalRowSchema = z.object({
+  id: str(),
+  date: str(),
+  title: str(),
+  body: str(),
+  mood: z.enum(['amazing', 'good', 'okay', 'tough', 'rough']).catch('good'),
+  weather: str(),
+  created_at: str(),
+  updated_at: str(),
 })
 
 export const expenseRowSchema = z.object({
@@ -222,6 +234,8 @@ export const tripRowSchema = z.object({
   home_currency: str('PHP'),
   language: str('en'),
   total_budget: num(),
+  baggage_limit_kg: num(),
+  travelers: strArr(),
   tour_notes: strArr(),
   restrictions: strArr(),
 })

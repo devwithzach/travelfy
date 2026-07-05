@@ -4,8 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import {
   Plane, Building2, Map, ListChecks, DollarSign,
   AlertCircle, Clock, CalendarDays, ChevronRight,
-  TrendingUp, CheckSquare, FileText, Globe, Circle, Check, MapPin, Plus, Pencil, RefreshCw,
-  ArrowLeftRight
+  TrendingUp, CheckSquare, FileText, Globe, Circle, Check, MapPin, Plus, Pencil,
+  ArrowLeftRight, BookMarked, Users, Share2, Stamp, RefreshCw
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -135,7 +135,11 @@ export default function Dashboard() {
     { label: 'Expenses', icon: DollarSign, to: '/expenses', color: 'bg-rose-500' },
     { label: 'Emergency', icon: AlertCircle, to: '/emergency', color: 'bg-red-600' },
     { label: 'Documents', icon: FileText, to: '/documents', color: 'bg-cyan-500' },
-    { label: 'Passport', icon: Globe, to: '/passport', color: 'bg-indigo-500' },
+    { label: 'Journal', icon: BookMarked, to: '/journal', color: 'bg-purple-500' },
+    { label: 'Splitter', icon: Users, to: '/splitter', color: 'bg-sky-500' },
+    { label: 'Visas', icon: Stamp, to: '/visa-tracker', color: 'bg-teal-500' },
+    { label: 'Export', icon: Share2, to: '/export', color: 'bg-indigo-500' },
+    { label: 'Passport', icon: Globe, to: '/passport', color: 'bg-green-600' },
   ]
 
   return (
