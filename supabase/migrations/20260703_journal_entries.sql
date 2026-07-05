@@ -1,7 +1,7 @@
 -- Travel journal entries
 create table if not exists journal_entries (
-  id uuid primary key default gen_random_uuid(),
-  trip_id uuid not null references trips(id) on delete cascade,
+  id text primary key,
+  trip_id text not null references trips(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
   date text not null default '',
   title text not null default '',
