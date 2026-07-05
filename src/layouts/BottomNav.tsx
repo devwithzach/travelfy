@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Plane, Building2, FileText, ListChecks,
   DollarSign, AlertCircle, StickyNote, Map, Link2, Settings,
-  MapPin, Camera, Globe, Layers, MoreHorizontal, X, TrendingUp, BarChart3, LogOut, Anchor, Bus, Bike, CloudRain, ShieldAlert, BookOpen, Signal, Shield, BookMarked, Share2, Users, Stamp
+  MapPin, Camera, Globe, Layers, MoreHorizontal, X, TrendingUp, BarChart3, LogOut, Anchor, Bus, Bike, CloudRain, ShieldAlert, BookOpen, Signal, Shield, BookMarked, Share2, Users, Stamp, Package, Crown
 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 import { useTrip } from '@/contexts/TripContext'
@@ -41,6 +41,9 @@ const moreItems = [
   { to: '/splitter', icon: Users, label: 'Splitter', color: '#0ea5e9' },
   { to: '/visa-tracker', icon: Stamp, label: 'Visas', color: '#10b981' },
   { to: '/export', icon: Share2, label: 'Export', color: '#6366f1' },
+  { to: '/tours', icon: Package, label: 'Book Tours', color: '#f97316' },
+  { to: '/operator', icon: Building2, label: 'Operator', color: '#7c3aed' },
+  { to: '/admin', icon: Crown, label: 'Admin', color: '#dc2626' },
   { to: '/passport', icon: Globe, label: 'Passport', color: '#10b981' },
   { to: '/currency', icon: TrendingUp, label: 'Currency', color: '#14b8a6' },
   { to: '/settings', icon: Settings, label: 'Settings', color: '#94a3b8' },

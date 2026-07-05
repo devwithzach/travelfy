@@ -35,6 +35,9 @@ import Splitter from '@/pages/Splitter'
 import Journal from '@/pages/Journal'
 import TripExport from '@/pages/TripExport'
 import VisaTracker from '@/pages/VisaTracker'
+import Admin from '@/pages/Admin'
+import Operator from '@/pages/Operator'
+import Tours from '@/pages/Tours'
 import Landing from '@/pages/Landing'
 import InstallPrompt from '@/components/common/InstallPrompt'
 import PWAUpdatePrompt from '@/components/common/PWAUpdatePrompt'
@@ -106,6 +109,9 @@ function AppRoutes() {
           <Route path="/splitter" element={<Splitter />} />
           <Route path="/export" element={<TripExport />} />
           <Route path="/visa-tracker" element={<VisaTracker />} />
+          <Route path="/tours" element={<Tours />} />
+          <Route path="/operator" element={<Operator />} />
+          <Route path="/admin" element={<Admin />} />
           <Route path="/country-info" element={<CountryInfo />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
