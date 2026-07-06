@@ -31,48 +31,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
 
-  const loadProfile = async (u: User) => {
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('id, role, full_name, email')
-      .eq('id', u.id)
-      .single()
-    if (data) {
-      setUserProfile({
-        id: data.id,
-        role: (data.role as UserRole) ?? 'traveler',
-        fullName: data.full_name ?? '',
-        email: data.email ?? u.email ?? '',
-      })
-    } else {
-      // Profile not yet created (trigger may race) — upsert a default
-      await supabase.from('user_profiles').upsert({
-        id: u.id,
-        role: 'traveler',
-        full_name: (u.user_metadata?.full_name as string | undefined) ?? '',
-        email: u.email ?? '',
-      }, { onConflict: 'id' })
-      setUserProfile({ id: u.id, role: 'traveler', fullName: '', email: u.email ?? '' })
-    }
-  }
-
+  // Original auth flow — unchanged, so routing never breaks
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setUser(session?.user ?? null)
-      if (session?.user) loadProfile(session.user).finally(() => setLoading(false))
-      else setLoading(false)
+      setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       setUser(session?.user ?? null)
-      if (session?.user) loadProfile(session.user)
-      else setUserProfile(null)
     })
 
     return () => subscription.unsubscribe()
   }, [])
+
+  // Load profile separately — never blocks routing
+  useEffect(() => {
+    if (!user) { setUserProfile(null); return }
+    supabase
+      .from('user_profiles')
+      .select('id, role, full_name, email')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setUserProfile({
+            id: data.id,
+            role: (data.role as UserRole) ?? 'traveler',
+            fullName: data.full_name ?? '',
+            email: data.email ?? user.email ?? '',
+          })
+        } else {
+          // Profile not yet created — upsert a default row
+          supabase.from('user_profiles').upsert({
+            id: user.id,
+            role: 'traveler',
+            full_name: (user.user_metadata?.full_name as string | undefined) ?? '',
+            email: user.email ?? '',
+          }, { onConflict: 'id' }).then(() => {
+            setUserProfile({ id: user.id, role: 'traveler', fullName: '', email: user.email ?? '' })
+          })
+        }
+      })
+  }, [user?.id])
 
   const signUp = async (email: string, password: string, name?: string) => {
     const { error } = await supabase.auth.signUp({
