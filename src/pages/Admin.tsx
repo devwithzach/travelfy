@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import {
   Shield, Users, Plane, TrendingUp, RefreshCw,
-  Crown, Building2, UserCheck, UserX,
+  Crown, Building2, UserCheck, UserX, Lock, Eye, EyeOff,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -11,6 +11,7 @@ import PageHeader from '@/components/common/PageHeader'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/utils/cn'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -216,6 +217,85 @@ function UserCard({ user, onRoleChange, updating }: UserCardProps) {
 
 // ── Main page ────────────────────────────────────────────────────────────────
 
+// ── Standalone admin login form ───────────────────────────────────────────────
+function AdminLogin() {
+  const { signIn } = useAuth()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPw, setShowPw] = useState(false)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    const { error: err } = await signIn(email, password)
+    if (err) { setError(err); setLoading(false) }
+    // On success, AuthContext sets user → page re-renders into admin dashboard
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background px-6">
+      <div className="w-full max-w-sm">
+        <div className="flex flex-col items-center mb-8">
+          <div className="w-14 h-14 rounded-2xl bg-rose-600 flex items-center justify-center mb-4 shadow-lg shadow-rose-500/30">
+            <Shield className="h-7 w-7 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold">Admin Portal</h1>
+          <p className="text-sm text-muted-foreground mt-1">Sign in with your admin account</p>
+        </div>
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">Email</label>
+            <Input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="admin@example.com"
+              required
+              autoComplete="email"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">Password</label>
+            <div className="relative">
+              <Input
+                type={showPw ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                autoComplete="current-password"
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              >
+                {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 rounded-2xl bg-rose-600 text-white font-semibold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-60"
+          >
+            <Lock className="h-4 w-4" />
+            {loading ? 'Signing in…' : 'Sign In'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function Admin() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -307,6 +387,9 @@ export default function Admin() {
       setUpdatingId(null)
     }
   }
+
+  // ── Not logged in — show admin login form ─────────────────────────────
+  if (!user) return <AdminLogin />
 
   // ── Loading role check ─────────────────────────────────────────────────
   if (roleLoading) {
