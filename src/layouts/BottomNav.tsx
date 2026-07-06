@@ -62,7 +62,10 @@ export default function BottomNav() {
   const visibleMain = inLobby ? mainNav.filter(n => n.to === '/' || n.to === '/trips') : mainNav
   const PH_ONLY = ['/ferries', '/buses', '/local-transport', '/weather', '/advisories', '/connectivity']
   const INTL_ONLY = ['/passport', '/currency', '/country-info']
+  // Pages that don't need an active trip — always visible even in lobby
+  const LOBBY_SAFE = ['/tours', '/operator', '/admin', '/settings']
   const visibleMore = moreItems.filter(n => {
+    if (inLobby && !LOBBY_SAFE.includes(n.to)) return false
     if (isDomestic && INTL_ONLY.includes(n.to)) return false
     if (!isDomestic && PH_ONLY.includes(n.to)) return false
     return true
@@ -181,8 +184,8 @@ export default function BottomNav() {
             </NavLink>
           ))}
 
-          {/* More button — hidden in lobby (drawer contents are all trip-scoped) */}
-          {!inLobby && (
+          {/* More button — always visible; lobby mode filters to non-trip items */}
+          {(
             <button
               onClick={() => setMoreOpen(v => !v)}
               className={cn(
