@@ -130,11 +130,15 @@ export default function Tours() {
   const [bookings, setBookings] = useState<MyBooking[]>([])
   const [bookingsLoading, setBookingsLoading] = useState(true)
 
+  // Payment success redirect state
+  const [paymentSuccessBanner, setPaymentSuccessBanner] = useState<string | null>(null)
+
   // Book dialog state
   const [bookingPkg, setBookingPkg] = useState<TourPackage | null>(null)
   const [travelerName, setTravelerName] = useState('')
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [paymongoLoading, setPaymongoLoading] = useState(false)
   const [bookError, setBookError] = useState<string | null>(null)
 
   // ---------------------------------------------------------------------------
@@ -209,6 +213,34 @@ export default function Tours() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const payment = params.get('payment')
+    const bookingId = params.get('booking_id')
+    if (payment === 'success' && bookingId) {
+      setPaymentSuccessBanner('Payment confirmed! Your booking is being processed.')
+      window.history.replaceState(null, '', location.pathname)
+      setTab('bookings')
+      fetchBookings()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!user) return
+    const channel = supabase
+      .channel('my-bookings')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'tour_bookings',
+        filter: `traveler_id=eq.${user.id}`,
+      }, () => { fetchBookings() })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
+
   // ---------------------------------------------------------------------------
   // Derived
   // ---------------------------------------------------------------------------
@@ -260,8 +292,9 @@ export default function Tours() {
     setSubmitting(true)
     setBookError(null)
 
+    const bookingId = crypto.randomUUID()
     const { error } = await supabase.from('tour_bookings').insert({
-      id: crypto.randomUUID(),
+      id: bookingId,
       package_id: bookingPkg.id,
       traveler_id: user.id,
       operator_id: bookingPkg.operatorId,
@@ -272,13 +305,42 @@ export default function Tours() {
       created_at: new Date().toISOString(),
     })
 
-    setSubmitting(false)
-
     if (error) {
+      setSubmitting(false)
       setBookError(error.message)
       return
     }
 
+    if (bookingPkg.currency === 'PHP') {
+      setPaymongoLoading(true)
+      try {
+        const resp = await fetch('/api/paymongo-checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bookingId,
+            packageName: bookingPkg.name,
+            price: bookingPkg.price,
+            currency: bookingPkg.currency,
+            successUrl: `${window.location.origin}/tours?payment=success&booking_id=${bookingId}`,
+            cancelUrl: `${window.location.origin}/tours?payment=cancelled`,
+          }),
+        })
+        if (resp.ok) {
+          const data = await resp.json() as { checkoutUrl?: string }
+          if (data.checkoutUrl) {
+            window.location.href = data.checkoutUrl
+            return
+          }
+        }
+      } catch {
+        // PayMongo unavailable — booking already saved as pending, fall through
+      } finally {
+        setPaymongoLoading(false)
+      }
+    }
+
+    setSubmitting(false)
     setBookingPkg(null)
     fetchBookings()
   }
@@ -363,6 +425,20 @@ export default function Tours() {
         iconColor="text-emerald-600"
         hideTripContext
       />
+
+      {paymentSuccessBanner && (
+        <div className="mx-4 mb-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-300 flex items-center justify-between gap-2">
+          <span>{paymentSuccessBanner}</span>
+          <button
+            type="button"
+            onClick={() => setPaymentSuccessBanner(null)}
+            className="shrink-0 text-xs font-semibold"
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {tripCreatedMsg && (
         <div className="mx-4 mb-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-300 flex items-center justify-between gap-2">
@@ -671,11 +747,17 @@ export default function Tours() {
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={closeBookDialog} disabled={submitting}>
+            <Button variant="outline" onClick={closeBookDialog} disabled={submitting || paymongoLoading}>
               Cancel
             </Button>
-            <Button onClick={confirmBooking} disabled={submitting}>
-              {submitting ? 'Submitting…' : 'Confirm Booking'}
+            <Button onClick={confirmBooking} disabled={submitting || paymongoLoading}>
+              {paymongoLoading
+                ? 'Redirecting to payment…'
+                : submitting
+                ? 'Submitting…'
+                : bookingPkg?.currency === 'PHP'
+                ? 'Confirm & Pay'
+                : 'Confirm Booking'}
             </Button>
           </DialogFooter>
         </DialogContent>

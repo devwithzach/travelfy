@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Building2, Package, Users, Plus, Edit2, Trash2,
   Eye, EyeOff, CheckCircle2, XCircle, Clock,
   DollarSign, MapPin, Calendar, Tag, ChevronDown, ChevronUp,
+  Upload, ImageIcon,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { compressImage } from '@/utils/image'
 import PageHeader from '@/components/common/PageHeader'
 import EmptyState from '@/components/common/EmptyState'
 import { Card, CardContent } from '@/components/ui/card'
@@ -502,6 +504,11 @@ function ItineraryBuilder({ days, onChange }: ItineraryBuilderProps) {
 }
 
 function PackageDialog({ open, onClose, draft, onChange, onSave, saving }: PackageDialogProps) {
+  const { user } = useAuth()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadingCover, setUploadingCover] = useState(false)
+  const [coverError, setCoverError] = useState<string | null>(null)
+
   const set = <K extends keyof PackageDraft>(k: K, v: PackageDraft[K]) =>
     onChange({ ...draft, [k]: v })
 
@@ -511,6 +518,32 @@ function PackageDialog({ open, onClose, draft, onChange, onSave, saving }: Packa
 
   const setItinerary = (days: PackageDay[]) =>
     onChange({ ...draft, itinerary: JSON.stringify(days) })
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    setCoverError(null)
+    setUploadingCover(true)
+    try {
+      const compressed = await compressImage(file, {
+        maxDimension: 1200,
+        quality: 0.85,
+        mimeType: 'image/jpeg',
+      })
+      const path = `${user.id}/${crypto.randomUUID()}.jpg`
+      const { error } = await supabase.storage
+        .from('tour-covers')
+        .upload(path, compressed, { upsert: true, contentType: 'image/jpeg' })
+      if (error) { setCoverError(error.message); return }
+      const { data: { publicUrl } } = supabase.storage.from('tour-covers').getPublicUrl(path)
+      onChange({ ...draft, coverImage: publicUrl })
+    } catch (err) {
+      setCoverError(err instanceof Error ? err.message : 'Upload failed')
+    } finally {
+      setUploadingCover(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
@@ -601,15 +634,71 @@ function PackageDialog({ open, onClose, draft, onChange, onSave, saving }: Packa
             </div>
           </div>
 
-          {/* Cover image URL */}
-          <div className="space-y-1.5">
-            <Label htmlFor="pkg-cover">Cover Image URL</Label>
-            <Input
-              id="pkg-cover"
-              placeholder="https://…"
-              value={draft.coverImage}
-              onChange={e => set('coverImage', e.target.value)}
+          {/* Cover image upload */}
+          <div className="space-y-2">
+            <Label>Cover Image</Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileSelect}
+              disabled={uploadingCover}
             />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingCover}
+              className={cn(
+                'w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed py-3 text-sm font-medium transition-colors',
+                uploadingCover
+                  ? 'border-border text-muted-foreground cursor-not-allowed'
+                  : 'border-violet-300 dark:border-violet-700 text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/20',
+              )}
+            >
+              {uploadingCover ? (
+                <>
+                  <div className="h-4 w-4 rounded-full border-2 border-violet-600 border-t-transparent animate-spin" />
+                  Uploading…
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4" />
+                  Upload Cover Photo
+                </>
+              )}
+            </button>
+
+            {draft.coverImage && (
+              <div className="relative rounded-xl overflow-hidden border border-border">
+                <img
+                  src={draft.coverImage}
+                  alt="Cover preview"
+                  className="w-full h-32 object-cover"
+                  onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                />
+                <div className="absolute bottom-1 right-1 flex items-center gap-1 rounded-lg bg-black/50 px-2 py-0.5">
+                  <ImageIcon className="h-3 w-3 text-white" />
+                  <span className="text-[10px] text-white">Cover</span>
+                </div>
+              </div>
+            )}
+
+            {coverError && (
+              <p className="text-xs text-destructive">{coverError}</p>
+            )}
+
+            <div className="space-y-1">
+              <Label htmlFor="pkg-cover" className="text-xs text-muted-foreground">
+                Or paste image URL
+              </Label>
+              <Input
+                id="pkg-cover"
+                placeholder="https://…"
+                value={draft.coverImage}
+                onChange={e => { set('coverImage', e.target.value); setCoverError(null) }}
+              />
+            </div>
           </div>
 
           {/* Status picker */}
@@ -643,12 +732,12 @@ function PackageDialog({ open, onClose, draft, onChange, onSave, saving }: Packa
         </div>
 
         <DialogFooter className="mt-2">
-          <Button variant="outline" onClick={onClose} disabled={saving}>
+          <Button variant="outline" onClick={onClose} disabled={saving || uploadingCover}>
             Cancel
           </Button>
           <Button
             onClick={onSave}
-            disabled={saving || !draft.name.trim() || !draft.destination.trim()}
+            disabled={saving || uploadingCover || !draft.name.trim() || !draft.destination.trim()}
           >
             {saving ? 'Saving…' : draft.id ? 'Save Changes' : 'Create Package'}
           </Button>
