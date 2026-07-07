@@ -4,7 +4,9 @@ import {
   Globe, MapPin, Calendar, DollarSign, Users,
   CheckCircle2, Clock, Search, Package, Bookmark,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
+import { useTrip } from '@/contexts/TripContext'
 import PageHeader from '@/components/common/PageHeader'
 import EmptyState from '@/components/common/EmptyState'
 import { Card, CardContent } from '@/components/ui/card'
@@ -110,8 +112,14 @@ function Spinner() {
 
 export default function Tours() {
   const { user } = useAuth()
+  const { createNewTrip, updateTrip, selectTrip } = useTrip()
+  const navigate = useNavigate()
 
   const [tab, setTab] = useState<'browse' | 'bookings'>('browse')
+
+  // Trip creation state
+  const [creatingTripForBooking, setCreatingTripForBooking] = useState<string | null>(null)
+  const [tripCreatedMsg, setTripCreatedMsg] = useState<string | null>(null)
 
   // Browse state
   const [packages, setPackages] = useState<TourPackage[]>([])
@@ -276,6 +284,73 @@ export default function Tours() {
   }
 
   // ---------------------------------------------------------------------------
+  // Create trip from booking
+  // ---------------------------------------------------------------------------
+
+  const createTripFromBooking = async (booking: MyBooking) => {
+    if (!user) return
+    setCreatingTripForBooking(booking.id)
+    try {
+      const { data: pkgRow } = await supabase
+        .from('tour_packages')
+        .select('*')
+        .eq('id', booking.packageId)
+        .single()
+
+      const pkg = pkgRow as Record<string, unknown> | null
+      const newTripId = await createNewTrip({
+        name: String(pkg?.name ?? booking.packageName),
+        destination: String(pkg?.destination ?? booking.destination),
+        startDate: '',
+        endDate: '',
+        description: String(pkg?.description ?? ''),
+        tripType: 'domestic',
+      })
+
+      // Parse and populate the package itinerary into the trip
+      let pkgDays: Array<{ dayNumber: number; title: string; activities: Array<{ time: string; title: string; location: string }> }> = []
+      try { pkgDays = JSON.parse(String(pkg?.itinerary ?? '[]')) } catch { pkgDays = [] }
+
+      if (pkgDays.length > 0) {
+        updateTrip(prev => ({
+          ...prev,
+          tripInfo: { ...prev.tripInfo, id: newTripId },
+          itinerary: pkgDays.map(day => ({
+            id: crypto.randomUUID(),
+            date: '',
+            dayNumber: day.dayNumber,
+            title: day.title,
+            subtitle: '',
+            meals: [],
+            hotel: '',
+            activities: day.activities.map(act => ({
+              id: crypto.randomUUID(),
+              time: act.time,
+              title: act.title,
+              description: '',
+              type: 'other' as const,
+              location: act.location,
+              done: false,
+            })),
+          })),
+        }))
+      }
+
+      localStorage.setItem(`travelfy-trip-from-booking-${booking.id}`, 'true')
+      selectTrip(newTripId)
+      setTripCreatedMsg('Trip created! Go to My Trips to set dates.')
+      setTimeout(() => setTripCreatedMsg(null), 5000)
+    } catch (err) {
+      console.error('Failed to create trip from booking:', err)
+    } finally {
+      setCreatingTripForBooking(null)
+    }
+  }
+
+  const tripAlreadyCreated = (bookingId: string) =>
+    localStorage.getItem(`travelfy-trip-from-booking-${bookingId}`) === 'true'
+
+  // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
@@ -288,6 +363,19 @@ export default function Tours() {
         iconColor="text-emerald-600"
         hideTripContext
       />
+
+      {tripCreatedMsg && (
+        <div className="mx-4 mb-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-300 flex items-center justify-between gap-2">
+          <span>{tripCreatedMsg}</span>
+          <button
+            type="button"
+            onClick={() => navigate('/trips')}
+            className="shrink-0 text-xs font-semibold underline underline-offset-2"
+          >
+            My Trips
+          </button>
+        </div>
+      )}
 
       <div className="px-4 space-y-4">
         <Tabs value={tab} onValueChange={(v) => setTab(v as 'browse' | 'bookings')}>
@@ -483,6 +571,31 @@ export default function Tours() {
                         <p className="text-[11px] text-muted-foreground">
                           Booked {formatDate(booking.createdAt)}
                         </p>
+
+                        {booking.status === 'confirmed' && !tripAlreadyCreated(booking.id) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full h-8 text-xs gap-1.5 text-violet-600 border-violet-200 hover:bg-violet-50 dark:hover:bg-violet-950/20"
+                            disabled={creatingTripForBooking === booking.id}
+                            onClick={() => createTripFromBooking(booking)}
+                          >
+                            {creatingTripForBooking === booking.id ? (
+                              <>
+                                <div className="h-3 w-3 rounded-full border-2 border-violet-600 border-t-transparent animate-spin" />
+                                Creating…
+                              </>
+                            ) : (
+                              '📅 Create Trip from Package'
+                            )}
+                          </Button>
+                        )}
+
+                        {booking.status === 'confirmed' && tripAlreadyCreated(booking.id) && (
+                          <p className="text-[11px] text-emerald-600 text-center">
+                            Trip already created
+                          </p>
+                        )}
                       </CardContent>
                     </Card>
                   </motion.div>

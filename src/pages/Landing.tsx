@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { motion, useInView } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -17,8 +17,29 @@ import {
   Compass,
   Clock,
   CreditCard,
-  FileText,
+  Package,
+  Users,
+  TrendingUp,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import { cn } from '@/utils/cn'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface TourPackage {
+  id: string
+  name: string
+  destination: string
+  duration_days: number
+  price: number
+  currency: string
+  description: string
+  cover_image_url?: string
+  status: string
+  created_at: string
+}
 
 // ─── Animation helpers ───────────────────────────────────────────────────────
 
@@ -76,7 +97,10 @@ function PhoneMockup() {
         }}
       >
         {/* Notch */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-6 rounded-b-2xl z-10" style={{ background: 'hsl(222 47% 8%)' }} />
+        <div
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-6 rounded-b-2xl z-10"
+          style={{ background: 'hsl(222 47% 8%)' }}
+        />
 
         {/* Status bar */}
         <div className="pt-8 px-4 pb-1 flex justify-between items-center">
@@ -96,17 +120,20 @@ function PhoneMockup() {
             </div>
             <div
               className="w-7 h-7 rounded-xl flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #2563EB 0%, #38BDF8 100%)' }}
+              style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' }}
             >
               <Plane className="w-3.5 h-3.5 text-white" />
             </div>
           </div>
 
           {/* Trip progress bar */}
-          <div className="h-1.5 rounded-full mb-1" style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <div
+            className="h-1.5 rounded-full mb-1"
+            style={{ background: 'rgba(255,255,255,0.08)' }}
+          >
             <motion.div
               className="h-full rounded-full"
-              style={{ background: 'linear-gradient(90deg, #2563EB, #38BDF8)' }}
+              style={{ background: 'linear-gradient(90deg, #4f46e5, #7c3aed)' }}
               initial={{ width: 0 }}
               animate={{ width: '62%' }}
               transition={{ duration: 1.4, delay: 0.8, ease: [0.22, 1, 0.36, 1] }}
@@ -118,14 +145,17 @@ function PhoneMockup() {
         {/* Quick stats row */}
         <div className="px-4 mb-3 grid grid-cols-3 gap-1.5">
           {[
-            { label: 'Flights', value: '2', icon: Plane, color: '#2563EB' },
-            { label: 'Hotels', value: '3', icon: MapPin, color: '#0ea5e9' },
-            { label: 'Budget', value: '$840', icon: DollarSign, color: '#6366f1' },
+            { label: 'Flights', value: '2', icon: Plane, color: '#4f46e5' },
+            { label: 'Hotels', value: '3', icon: MapPin, color: '#7c3aed' },
+            { label: 'Budget', value: '$840', icon: DollarSign, color: '#8b5cf6' },
           ].map(({ label, value, icon: Icon, color }) => (
             <div
               key={label}
               className="rounded-xl p-2 flex flex-col gap-0.5"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}
+              style={{
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.07)',
+              }}
             >
               <Icon className="w-3 h-3" style={{ color }} />
               <p className="text-[11px] font-bold text-white">{value}</p>
@@ -138,10 +168,10 @@ function PhoneMockup() {
         <div className="px-4 mb-2">
           <p className="text-[9px] text-white/40 mb-2 uppercase tracking-wider">Today's Plan</p>
           {[
-            { time: '10:00', title: 'Senso-ji Temple', done: true, color: '#38BDF8' },
-            { time: '13:00', title: 'Ramen Lunch', done: true, color: '#38BDF8' },
-            { time: '16:00', title: 'Shibuya Crossing', done: false, color: '#2563EB' },
-            { time: '19:00', title: 'Dinner Reservation', done: false, color: '#6366f1' },
+            { time: '10:00', title: 'Senso-ji Temple', done: true, color: '#7c3aed' },
+            { time: '13:00', title: 'Ramen Lunch', done: true, color: '#7c3aed' },
+            { time: '16:00', title: 'Shibuya Crossing', done: false, color: '#4f46e5' },
+            { time: '19:00', title: 'Dinner Reservation', done: false, color: '#8b5cf6' },
           ].map((item, i) => (
             <motion.div
               key={i}
@@ -153,16 +183,26 @@ function PhoneMockup() {
             >
               <div
                 className="w-1 h-5 rounded-full flex-shrink-0"
-                style={{ background: item.done ? item.color : 'rgba(255,255,255,0.15)' }}
+                style={{
+                  background: item.done ? item.color : 'rgba(255,255,255,0.15)',
+                }}
               />
               <div className="flex-1 min-w-0">
-                <p className={`text-[10px] font-medium truncate ${item.done ? 'text-white/40 line-through' : 'text-white/80'}`}>
+                <p
+                  className={cn(
+                    'text-[10px] font-medium truncate',
+                    item.done ? 'text-white/40 line-through' : 'text-white/80',
+                  )}
+                >
                   {item.title}
                 </p>
                 <p className="text-[8px] text-white/30">{item.time}</p>
               </div>
               {item.done && (
-                <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: item.color, opacity: 0.7 }} />
+                <div
+                  className="w-3 h-3 rounded-full flex-shrink-0"
+                  style={{ background: item.color, opacity: 0.7 }}
+                />
               )}
             </motion.div>
           ))}
@@ -171,19 +211,29 @@ function PhoneMockup() {
         {/* Map thumbnail */}
         <div
           className="mx-4 rounded-xl h-16 flex items-center justify-center relative overflow-hidden"
-          style={{ background: 'rgba(37,99,235,0.12)', border: '1px solid rgba(37,99,235,0.2)' }}
+          style={{
+            background: 'rgba(79,70,229,0.12)',
+            border: '1px solid rgba(79,70,229,0.2)',
+          }}
         >
-          <div className="absolute inset-0 opacity-20"
+          <div
+            className="absolute inset-0 opacity-20"
             style={{
-              backgroundImage: 'radial-gradient(circle at 30% 60%, #2563EB 1px, transparent 1px), radial-gradient(circle at 70% 30%, #38BDF8 1px, transparent 1px)',
+              backgroundImage:
+                'radial-gradient(circle at 30% 60%, #4f46e5 1px, transparent 1px), radial-gradient(circle at 70% 30%, #7c3aed 1px, transparent 1px)',
               backgroundSize: '20px 20px',
             }}
           />
-          <Map className="w-5 h-5 text-blue-400 mr-2" />
-          <span className="text-[10px] text-blue-400 font-medium">Map Explorer</span>
+          <Map className="w-5 h-5 text-violet-400 mr-2" />
+          <span className="text-[10px] text-violet-400 font-medium">Map Explorer</span>
           <motion.div
             className="absolute w-2 h-2 rounded-full"
-            style={{ background: '#38BDF8', top: '40%', left: '35%', boxShadow: '0 0 6px #38BDF8' }}
+            style={{
+              background: '#7c3aed',
+              top: '40%',
+              left: '35%',
+              boxShadow: '0 0 6px #7c3aed',
+            }}
             animate={{ scale: [1, 1.6, 1], opacity: [1, 0.4, 1] }}
             transition={{ duration: 2, repeat: Infinity }}
           />
@@ -191,245 +241,198 @@ function PhoneMockup() {
       </div>
 
       {/* Side buttons */}
-      <div className="absolute right-0 top-28 w-1 h-10 rounded-l-sm" style={{ background: 'rgba(255,255,255,0.12)' }} />
-      <div className="absolute left-0 top-24 w-1 h-7 rounded-r-sm" style={{ background: 'rgba(255,255,255,0.12)' }} />
-      <div className="absolute left-0 top-36 w-1 h-7 rounded-r-sm" style={{ background: 'rgba(255,255,255,0.12)' }} />
+      <div
+        className="absolute right-0 top-28 w-1 h-10 rounded-l-sm"
+        style={{ background: 'rgba(255,255,255,0.12)' }}
+      />
+      <div
+        className="absolute left-0 top-24 w-1 h-7 rounded-r-sm"
+        style={{ background: 'rgba(255,255,255,0.12)' }}
+      />
+      <div
+        className="absolute left-0 top-36 w-1 h-7 rounded-r-sm"
+        style={{ background: 'rgba(255,255,255,0.12)' }}
+      />
     </div>
   )
 }
 
-// ─── Feature cards data ───────────────────────────────────────────────────────
+// ─── Floating feature cards ───────────────────────────────────────────────────
+
+const heroFloatingCards = [
+  { icon: CalendarDays, label: 'Day-by-day Itinerary', color: '#7c3aed', delay: 0 },
+  { icon: DollarSign, label: 'Multi-currency Expenses', color: '#4f46e5', delay: 0.4 },
+  { icon: Map, label: 'Interactive Map', color: '#8b5cf6', delay: 0.8 },
+  { icon: Plane, label: 'Flight Tracking', color: '#6d28d9', delay: 1.2 },
+]
+
+function FloatingFeatureCards() {
+  return (
+    <div className="relative flex flex-col gap-3">
+      {heroFloatingCards.map((card, i) => (
+        <motion.div
+          key={card.label}
+          initial={{ opacity: 0, x: 40 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6, delay: 0.5 + card.delay, ease: [0.22, 1, 0.36, 1] }}
+        >
+          <motion.div
+            animate={{ y: [0, i % 2 === 0 ? -6 : 6, 0] }}
+            transition={{
+              duration: 3.5 + i * 0.5,
+              repeat: Infinity,
+              ease: 'easeInOut',
+              delay: card.delay,
+            }}
+            className="flex items-center gap-3 px-4 py-3 rounded-2xl"
+            style={{
+              background: 'rgba(255,255,255,0.07)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              backdropFilter: 'blur(12px)',
+              boxShadow: `0 4px 24px ${card.color}20`,
+            }}
+          >
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ background: `${card.color}25`, border: `1px solid ${card.color}40` }}
+            >
+              <card.icon className="w-5 h-5" style={{ color: card.color }} />
+            </div>
+            <span className="text-sm font-medium text-white/80">{card.label}</span>
+          </motion.div>
+        </motion.div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Features data ────────────────────────────────────────────────────────────
 
 const features = [
   {
-    icon: Map,
-    title: 'Map Explorer',
-    description: 'Discover restaurants, attractions & shops near you with live POI search.',
-    gradient: 'from-blue-500 to-cyan-400',
-  },
-  {
     icon: CalendarDays,
-    title: 'Trip Timeline',
-    description: 'Day-by-day itinerary with drag-and-drop scheduling and real-time updates.',
+    title: 'Day-by-day Itinerary',
+    description: 'Build your perfect schedule with timed activities, notes, and real-time done tracking.',
     gradient: 'from-violet-500 to-purple-400',
   },
   {
     icon: Plane,
-    title: 'Flights & Hotels',
-    description: 'All your bookings centralised — gate changes, check-in times & more.',
-    gradient: 'from-sky-500 to-blue-400',
+    title: 'Flights, Hotels & Transport',
+    description: 'All your bookings in one place — gate changes, check-in times, ferry legs, local transport.',
+    gradient: 'from-indigo-500 to-blue-400',
   },
   {
-    icon: CreditCard,
-    title: 'Expense Tracker',
-    description: 'Log spending in any currency with automatic conversion and budget alerts.',
+    icon: DollarSign,
+    title: 'Multi-currency Expenses',
+    description: 'Log spending in any currency with live FX rates and automatic budget tracking.',
     gradient: 'from-emerald-500 to-teal-400',
   },
   {
-    icon: Camera,
-    title: 'Trip Photos',
-    description: 'GPS-tagged memories automatically organised by day and location.',
+    icon: Map,
+    title: 'Interactive Map Explorer',
+    description: 'Discover restaurants, landmarks & hidden gems near you with live POI search and walking nav.',
+    gradient: 'from-sky-500 to-cyan-400',
+  },
+  {
+    icon: Shield,
+    title: 'Smart Packing Checklist',
+    description: 'Never forget essentials again. Customisable lists that sync across all your devices.',
+    gradient: 'from-amber-500 to-orange-400',
+  },
+  {
+    icon: Globe,
+    title: 'Works Offline',
+    description: 'Full PWA — maps, itinerary, and essentials work even without an internet connection.',
     gradient: 'from-pink-500 to-rose-400',
   },
-  {
-    icon: Wifi,
-    title: 'Works Offline',
-    description: 'Full PWA — everything you need works without an internet connection.',
-    gradient: 'from-orange-500 to-amber-400',
-  },
 ]
 
-// ─── Stats ────────────────────────────────────────────────────────────────────
+// ─── Tour Package Card ────────────────────────────────────────────────────────
 
-const stats = [
-  { value: '10,000+', label: 'Trips planned' },
-  { value: '50+', label: 'Countries covered' },
-  { value: '6', label: 'Core tools in one app' },
-  { value: '100%', label: 'Free to get started' },
-]
-
-// ─── Spotlight data ───────────────────────────────────────────────────────────
-
-const spotlights = [
-  {
-    icon: Compass,
-    tag: 'Map Explorer',
-    headline: 'Find the best spots around you, instantly',
-    body: 'Search for restaurants, landmarks, hotels, and hidden gems. Filter by category, see ratings, and add directly to your itinerary — all without leaving the app.',
-    visual: <MapMockVisual />,
-  },
-  {
-    icon: Clock,
-    tag: 'Timeline',
-    headline: 'Every day of your trip, perfectly organised',
-    body: 'Build a day-by-day schedule with times, notes, and locations. See what\'s next at a glance, mark activities done, and never miss a reservation.',
-    visual: <TimelineMockVisual />,
-  },
-]
-
-function MapMockVisual() {
-  return (
-    <div
-      className="rounded-2xl overflow-hidden relative"
-      style={{
-        background: 'hsl(222 47% 10%)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        height: 280,
-      }}
-    >
-      {/* Grid pattern */}
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(37,99,235,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(37,99,235,0.08) 1px, transparent 1px)',
-          backgroundSize: '32px 32px',
-        }}
-      />
-      {/* Animated pings */}
-      {[
-        { top: '30%', left: '45%', color: '#2563EB', delay: 0 },
-        { top: '55%', left: '30%', color: '#38BDF8', delay: 0.5 },
-        { top: '45%', left: '65%', color: '#6366f1', delay: 1 },
-        { top: '70%', left: '55%', color: '#38BDF8', delay: 0.25 },
-      ].map((p, i) => (
-        <div key={i} className="absolute" style={{ top: p.top, left: p.left }}>
-          <motion.div
-            className="w-4 h-4 rounded-full"
-            style={{ background: p.color, opacity: 0.3 }}
-            animate={{ scale: [1, 2.5, 1], opacity: [0.3, 0, 0.3] }}
-            transition={{ duration: 2.5, repeat: Infinity, delay: p.delay }}
-          />
-          <div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full"
-            style={{ background: p.color, boxShadow: `0 0 8px ${p.color}` }}
-          />
-        </div>
-      ))}
-      {/* POI result cards */}
-      <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
-        {[
-          { name: 'Ichiran Ramen', cat: 'Restaurant', rating: '4.8', dist: '120m' },
-          { name: 'Senso-ji Temple', cat: 'Landmark', rating: '4.9', dist: '340m' },
-        ].map((poi) => (
-          <div
-            key={poi.name}
-            className="flex items-center justify-between px-3 py-2 rounded-xl"
-            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(8px)' }}
-          >
-            <div>
-              <p className="text-xs font-semibold text-white">{poi.name}</p>
-              <p className="text-[10px] text-white/40">{poi.cat} · {poi.dist}</p>
-            </div>
-            <div className="flex items-center gap-1">
-              <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
-              <span className="text-xs text-white/70">{poi.rating}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function TimelineMockVisual() {
-  const days = [
-    {
-      day: 'Day 3 — Tue, Mar 12',
-      items: [
-        { time: '09:00', title: 'Meiji Shrine', color: '#2563EB', done: true },
-        { time: '12:30', title: 'Harajuku Lunch', color: '#38BDF8', done: true },
-        { time: '15:00', title: 'Shibuya Crossing', color: '#6366f1', done: false },
-        { time: '20:00', title: 'Dinner at Nobu', color: '#0ea5e9', done: false },
-      ],
-    },
-  ]
-
-  return (
-    <div
-      className="rounded-2xl overflow-hidden p-4 space-y-3"
-      style={{
-        background: 'hsl(222 47% 10%)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        minHeight: 280,
-      }}
-    >
-      {days.map((day) => (
-        <div key={day.day}>
-          <p className="text-xs font-semibold text-white/40 mb-3 uppercase tracking-wider">{day.day}</p>
-          <div className="relative pl-5">
-            {/* Vertical line */}
-            <div className="absolute left-1.5 top-2 bottom-2 w-px" style={{ background: 'rgba(255,255,255,0.1)' }} />
-            <div className="space-y-4">
-              {day.items.map((item, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: -12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 + i * 0.12, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                  className="flex items-start gap-3"
-                >
-                  {/* Dot */}
-                  <div
-                    className="absolute left-0 w-3 h-3 rounded-full border-2 mt-0.5"
-                    style={{
-                      background: item.done ? item.color : 'hsl(222 47% 10%)',
-                      borderColor: item.done ? item.color : 'rgba(255,255,255,0.2)',
-                      boxShadow: item.done ? `0 0 8px ${item.color}60` : 'none',
-                    }}
-                  />
-                  <div
-                    className="flex-1 p-3 rounded-xl"
-                    style={{
-                      background: item.done ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)',
-                      border: `1px solid ${item.done ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.1)'}`,
-                    }}
-                  >
-                    <div className="flex justify-between items-start">
-                      <p
-                        className={`text-sm font-medium ${item.done ? 'text-white/30 line-through' : 'text-white'}`}
-                      >
-                        {item.title}
-                      </p>
-                      <span className="text-[10px] text-white/30 ml-2 flex-shrink-0">{item.time}</span>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ─── Floating icons ───────────────────────────────────────────────────────────
-
-function FloatingIcon({
-  icon: Icon,
-  style,
-  delay = 0,
-  color = '#2563EB',
+function TourPackageCard({
+  pkg,
+  onBook,
 }: {
-  icon: React.ElementType
-  style: React.CSSProperties
-  delay?: number
-  color?: string
+  pkg: TourPackage
+  onBook: () => void
 }) {
+  const nights = pkg.duration_days > 1 ? `${pkg.duration_days}D/${pkg.duration_days - 1}N` : '1 Day'
+
   return (
     <motion.div
-      className="absolute rounded-2xl flex items-center justify-center"
+      variants={fadeUp}
+      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      className="rounded-2xl overflow-hidden flex flex-col h-full"
       style={{
-        ...style,
-        background: `${color}18`,
-        border: `1px solid ${color}30`,
-        backdropFilter: 'blur(8px)',
+        background: '#fff',
+        border: '1px solid #e5e7eb',
+        boxShadow: '0 1px 8px rgba(0,0,0,0.06)',
       }}
-      animate={{ y: [0, -12, 0] }}
-      transition={{ duration: 3 + delay, repeat: Infinity, ease: 'easeInOut', delay }}
     >
-      <Icon style={{ color, width: '55%', height: '55%' }} />
+      {/* Cover */}
+      <div
+        className="h-40 relative flex-shrink-0"
+        style={{
+          background: pkg.cover_image_url
+            ? undefined
+            : 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+        }}
+      >
+        {pkg.cover_image_url ? (
+          <img
+            src={pkg.cover_image_url}
+            alt={pkg.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <MapPin className="w-12 h-12 text-white/30" />
+          </div>
+        )}
+        {/* Duration badge */}
+        <div className="absolute top-3 right-3">
+          <span
+            className="px-2.5 py-1 rounded-full text-xs font-semibold"
+            style={{ background: 'rgba(0,0,0,0.55)', color: '#fff', backdropFilter: 'blur(6px)' }}
+          >
+            {nights}
+          </span>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="p-4 flex flex-col flex-1">
+        <div className="flex items-start gap-2 mb-1">
+          <MapPin className="w-3.5 h-3.5 text-violet-500 mt-0.5 flex-shrink-0" />
+          <span className="text-xs text-violet-600 font-medium">{pkg.destination}</span>
+        </div>
+        <h3 className="font-bold text-gray-900 text-base leading-snug mb-2 line-clamp-1">
+          {pkg.name}
+        </h3>
+        <p className="text-sm text-gray-500 leading-relaxed line-clamp-2 flex-1 mb-4">
+          {pkg.description}
+        </p>
+
+        <div className="flex items-center justify-between mt-auto">
+          <div>
+            <span className="text-xs text-gray-400">from</span>
+            <p className="text-lg font-extrabold text-gray-900 tabular-nums leading-tight">
+              {pkg.currency ?? 'PHP'}{' '}
+              {Number(pkg.price).toLocaleString()}
+            </p>
+          </div>
+          <button
+            onClick={onBook}
+            className="px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all duration-200 hover:scale-[1.03] active:scale-[0.97]"
+            style={{
+              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              boxShadow: '0 2px 12px rgba(79,70,229,0.35)',
+            }}
+          >
+            Book Now
+          </button>
+        </div>
+      </div>
     </motion.div>
   )
 }
@@ -438,26 +441,64 @@ function FloatingIcon({
 
 export default function Landing() {
   const navigate = useNavigate()
+  const toursRef = useRef<HTMLDivElement>(null)
   const featuresRef = useRef<HTMLDivElement>(null)
 
-  const scrollToFeatures = () => {
-    featuresRef.current?.scrollIntoView({ behavior: 'smooth' })
+  const [packages, setPackages] = useState<TourPackage[]>([])
+  const [pkgLoading, setPkgLoading] = useState(true)
+  const [pkgError, setPkgError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchPackages() {
+      try {
+        const { data, error } = await supabase
+          .from('tour_packages')
+          .select('*')
+          .eq('status', 'published')
+          .order('created_at', { ascending: false })
+          .limit(6)
+
+        if (error) {
+          // Table may not exist yet — treat as empty, not an error
+          if (error.code === '42P01') {
+            setPackages([])
+          } else {
+            setPkgError('Could not load packages.')
+          }
+        } else {
+          setPackages(data ?? [])
+        }
+      } catch {
+        setPkgError('Could not load packages.')
+      } finally {
+        setPkgLoading(false)
+      }
+    }
+
+    fetchPackages()
+  }, [])
+
+  const scrollTo = (ref: React.RefObject<HTMLDivElement | null>) => {
+    ref.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const handleBookNow = () => {
+    navigate('/login', { state: { redirect: '/tours' } })
   }
 
   return (
-    <div
-      className="min-h-screen text-white overflow-x-hidden"
-      style={{ background: 'hsl(222 47% 8%)' }}
-    >
-      {/* ── Header ── */}
+    <div className="min-h-screen overflow-x-hidden" style={{ background: '#f9fafb' }}>
+
+      {/* ── Sticky header ── */}
       <header
-        className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4"
+        className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5 py-3"
         style={{
-          background: 'rgba(10,15,30,0.7)',
+          background: 'rgba(15,10,40,0.82)',
           backdropFilter: 'blur(16px)',
           borderBottom: '1px solid rgba(255,255,255,0.06)',
         }}
       >
+        {/* Logo */}
         <motion.div
           initial={{ opacity: 0, x: -16 }}
           animate={{ opacity: 1, x: 0 }}
@@ -466,65 +507,90 @@ export default function Landing() {
         >
           <div
             className="w-8 h-8 rounded-xl flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #2563EB 0%, #38BDF8 100%)' }}
+            style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' }}
           >
             <Plane className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-lg tracking-tight">Travelfy</span>
+          <span className="font-bold text-lg tracking-tight text-white">Travelfy</span>
         </motion.div>
 
+        {/* Nav — desktop */}
         <motion.nav
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="hidden md:flex items-center gap-8 text-sm text-white/60"
+          className="hidden md:flex items-center gap-7 text-sm text-white/55"
         >
-          <button onClick={scrollToFeatures} className="hover:text-white transition-colors">Features</button>
-          <a href="#spotlight" className="hover:text-white transition-colors">How it works</a>
-          <a href="#cta" className="hover:text-white transition-colors">Get started</a>
+          <button
+            onClick={() => scrollTo(featuresRef)}
+            className="hover:text-white transition-colors"
+          >
+            Features
+          </button>
+          <button
+            onClick={() => scrollTo(toursRef)}
+            className="hover:text-white transition-colors"
+          >
+            Tour Packages
+          </button>
+          <a href="#operators" className="hover:text-white transition-colors">
+            For Operators
+          </a>
         </motion.nav>
 
-        <motion.button
+        {/* Auth buttons */}
+        <motion.div
           initial={{ opacity: 0, x: 16 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          onClick={() => navigate('/login')}
-          className="px-4 py-2 rounded-xl text-sm font-medium border border-white/15 text-white/80 hover:border-white/30 hover:text-white transition-all"
+          className="flex items-center gap-2"
         >
-          Login
-        </motion.button>
+          <button
+            onClick={() => navigate('/login')}
+            className="px-3 py-1.5 rounded-xl text-sm font-medium text-white/70 hover:text-white transition-colors"
+          >
+            Sign In
+          </button>
+          <button
+            onClick={() => navigate('/login')}
+            className="px-4 py-1.5 rounded-xl text-sm font-semibold text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+            style={{
+              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              boxShadow: '0 2px 12px rgba(79,70,229,0.4)',
+            }}
+          >
+            Get Started
+          </button>
+        </motion.div>
       </header>
 
       {/* ── Hero ── */}
-      <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
-        {/* Background glow */}
+      <section
+        className="relative min-h-screen flex items-center justify-center overflow-hidden pt-16"
+        style={{
+          background: 'linear-gradient(135deg, #1e1b4b 0%, #2e1065 60%, #4c1d95 100%)',
+        }}
+      >
+        {/* Ambient glow blobs */}
         <div
-          className="absolute inset-0 pointer-events-none"
+          className="absolute top-0 left-1/4 w-96 h-96 rounded-full pointer-events-none"
           style={{
-            background:
-              'radial-gradient(ellipse 80% 50% at 50% -10%, rgba(37,99,235,0.25) 0%, transparent 70%)',
+            background: 'radial-gradient(circle, rgba(124,58,237,0.25) 0%, transparent 70%)',
+            filter: 'blur(60px)',
           }}
         />
         <div
-          className="absolute bottom-0 left-0 right-0 h-40 pointer-events-none"
+          className="absolute bottom-10 right-1/4 w-80 h-80 rounded-full pointer-events-none"
           style={{
-            background: 'linear-gradient(to bottom, transparent, hsl(222 47% 8%))',
+            background: 'radial-gradient(circle, rgba(79,70,229,0.2) 0%, transparent 70%)',
+            filter: 'blur(50px)',
           }}
         />
 
-        {/* Floating icons — desktop only */}
-        <div className="hidden lg:block">
-          <FloatingIcon icon={Plane} style={{ top: '22%', left: '10%', width: 52, height: 52 }} delay={0} color="#2563EB" />
-          <FloatingIcon icon={MapPin} style={{ top: '60%', left: '8%', width: 44, height: 44 }} delay={1} color="#38BDF8" />
-          <FloatingIcon icon={Camera} style={{ top: '30%', right: '9%', width: 48, height: 48 }} delay={0.5} color="#6366f1" />
-          <FloatingIcon icon={Globe} style={{ top: '65%', right: '11%', width: 52, height: 52 }} delay={1.5} color="#0ea5e9" />
-          <FloatingIcon icon={Star} style={{ top: '15%', right: '22%', width: 38, height: 38 }} delay={0.8} color="#f59e0b" />
-          <FloatingIcon icon={Shield} style={{ top: '75%', left: '20%', width: 40, height: 40 }} delay={1.2} color="#10b981" />
-        </div>
-
-        <div className="relative z-10 max-w-6xl mx-auto px-6 flex flex-col lg:flex-row items-center gap-16 py-20">
+        <div className="relative z-10 max-w-6xl mx-auto px-5 flex flex-col lg:flex-row items-center gap-12 lg:gap-20 py-20">
           {/* Text block */}
           <div className="flex-1 text-center lg:text-left max-w-xl">
+            {/* Badge */}
             <motion.div
               variants={fadeUp}
               initial="hidden"
@@ -532,13 +598,13 @@ export default function Landing() {
               custom={0}
               className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium mb-6"
               style={{
-                background: 'rgba(37,99,235,0.15)',
-                border: '1px solid rgba(37,99,235,0.35)',
-                color: '#93c5fd',
+                background: 'rgba(124,58,237,0.2)',
+                border: '1px solid rgba(124,58,237,0.45)',
+                color: '#c4b5fd',
               }}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-              Your all-in-one travel companion
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+              Your complete travel companion & tour booking platform
             </motion.div>
 
             <motion.h1
@@ -546,19 +612,18 @@ export default function Landing() {
               initial="hidden"
               animate="visible"
               custom={1}
-              className="text-5xl md:text-6xl font-extrabold leading-[1.08] tracking-tight mb-6"
+              className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-[1.08] tracking-tight mb-5 text-white"
             >
-              Your complete{' '}
+              Plan smarter.{' '}
               <span
                 style={{
-                  background: 'linear-gradient(135deg, #2563EB 0%, #38BDF8 100%)',
+                  background: 'linear-gradient(135deg, #a78bfa 0%, #c084fc 100%)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                 }}
               >
-                travel
-              </span>{' '}
-              companion
+                Travel better.
+              </span>
             </motion.h1>
 
             <motion.p
@@ -566,12 +631,13 @@ export default function Landing() {
               initial="hidden"
               animate="visible"
               custom={2}
-              className="text-lg text-white/55 leading-relaxed mb-10"
+              className="text-base sm:text-lg text-white/55 leading-relaxed mb-10"
             >
-              Plan, explore, and remember every moment of your journey. Maps, timelines, bookings,
-              expenses and more — all in one beautiful app.
+              Travelfy is your all-in-one trip command center — itineraries, bookings,
+              expenses, maps, and tour packages. Built for Filipino travelers.
             </motion.p>
 
+            {/* CTAs */}
             <motion.div
               variants={fadeUp}
               initial="hidden"
@@ -581,232 +647,357 @@ export default function Landing() {
             >
               <button
                 onClick={() => navigate('/login')}
-                className="group flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl font-semibold text-base transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                className="group flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl font-semibold text-base text-white transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                 style={{
-                  background: 'linear-gradient(135deg, #2563EB 0%, #38BDF8 100%)',
-                  boxShadow: '0 4px 24px rgba(37,99,235,0.45)',
+                  background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                  boxShadow: '0 4px 24px rgba(79,70,229,0.5)',
                 }}
               >
-                Start Free
+                Get Started Free
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
               </button>
 
               <button
-                onClick={scrollToFeatures}
-                className="flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl font-medium text-base text-white/70 border border-white/12 hover:border-white/25 hover:text-white transition-all duration-200"
+                onClick={() => scrollTo(toursRef)}
+                className="flex items-center justify-center gap-2 px-7 py-3.5 rounded-2xl font-medium text-base text-white/70 border border-white/15 hover:border-white/30 hover:text-white transition-all duration-200"
               >
                 <ChevronDown className="w-4 h-4" />
-                See how it works
+                Browse Tours
               </button>
             </motion.div>
           </div>
 
-          {/* Phone mockup */}
-          <motion.div
-            initial={{ opacity: 0, y: 40, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.9, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            className="flex-shrink-0"
-          >
-            <PhoneMockup />
-          </motion.div>
+          {/* Right column — phone + floating cards */}
+          <div className="flex flex-col lg:flex-row items-center gap-8 lg:gap-10">
+            <motion.div
+              initial={{ opacity: 0, y: 40, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.9, delay: 0.3, ease: [0.22, 1, 0.36, 1] }}
+              className="flex-shrink-0"
+            >
+              <PhoneMockup />
+            </motion.div>
+
+            <div className="hidden lg:block">
+              <FloatingFeatureCards />
+            </div>
+          </div>
         </div>
+
+        {/* Bottom fade */}
+        <div
+          className="absolute bottom-0 left-0 right-0 h-24 pointer-events-none"
+          style={{ background: 'linear-gradient(to bottom, transparent, #f9fafb)' }}
+        />
       </section>
 
-      {/* ── Stats bar ── */}
-      <AnimatedSection>
-        <section className="py-12 border-y" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-          <div className="max-w-5xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
-            {stats.map((s, i) => (
-              <motion.div
-                key={s.label}
-                variants={fadeUp}
-                custom={i}
-                className="text-center"
-              >
-                <p
-                  className="text-3xl font-extrabold mb-1"
-                  style={{
-                    background: 'linear-gradient(135deg, #2563EB 0%, #38BDF8 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                  }}
-                >
-                  {s.value}
-                </p>
-                <p className="text-sm text-white/40">{s.label}</p>
-              </motion.div>
-            ))}
-          </div>
-        </section>
-      </AnimatedSection>
-
-      {/* ── Features grid ── */}
-      <section ref={featuresRef} className="py-24 max-w-6xl mx-auto px-6">
+      {/* ── Features row ── */}
+      <section ref={featuresRef} className="py-20 max-w-6xl mx-auto px-5">
         <AnimatedSection>
-          <div className="text-center mb-16">
+          <div className="text-center mb-14">
             <motion.p
               variants={fadeIn}
               custom={0}
-              className="text-sm font-semibold uppercase tracking-widest mb-3"
-              style={{ color: '#60a5fa' }}
+              className="text-sm font-semibold uppercase tracking-widest mb-3 text-violet-600"
             >
               Everything you need
             </motion.p>
             <motion.h2
               variants={fadeUp}
               custom={1}
-              className="text-4xl md:text-5xl font-extrabold tracking-tight mb-5"
+              className="text-3xl md:text-4xl font-extrabold tracking-tight mb-4 text-gray-900"
             >
               Built for the way you travel
             </motion.h2>
-            <motion.p variants={fadeUp} custom={2} className="text-white/45 text-lg max-w-xl mx-auto">
-              Six powerful tools in one app, crafted for modern travellers who want control without the chaos.
+            <motion.p variants={fadeUp} custom={2} className="text-gray-500 text-base max-w-xl mx-auto">
+              Six powerful tools — one beautiful app, crafted for modern travelers who want
+              control without the chaos.
             </motion.p>
           </div>
         </AnimatedSection>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {features.map((f, i) => (
             <AnimatedSection key={f.title}>
               <motion.div
                 variants={fadeUp}
                 custom={i % 3}
-                whileHover={{ y: -4, transition: { duration: 0.2 } }}
-                className="group p-6 rounded-2xl h-full cursor-default transition-colors duration-200"
+                whileHover={{ y: -3, transition: { duration: 0.2 } }}
+                className="group p-5 rounded-2xl h-full cursor-default transition-all duration-200"
                 style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.08)',
+                  background: '#fff',
+                  border: '1px solid #e5e7eb',
+                  boxShadow: '0 1px 6px rgba(0,0,0,0.05)',
                 }}
                 onMouseEnter={(e) => {
-                  ;(e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(37,99,235,0.4)'
-                  ;(e.currentTarget as HTMLDivElement).style.background = 'rgba(37,99,235,0.06)'
+                  const el = e.currentTarget as HTMLDivElement
+                  el.style.borderColor = 'rgba(124,58,237,0.35)'
+                  el.style.boxShadow = '0 4px 20px rgba(124,58,237,0.1)'
                 }}
                 onMouseLeave={(e) => {
-                  ;(e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(255,255,255,0.08)'
-                  ;(e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.04)'
+                  const el = e.currentTarget as HTMLDivElement
+                  el.style.borderColor = '#e5e7eb'
+                  el.style.boxShadow = '0 1px 6px rgba(0,0,0,0.05)'
                 }}
               >
                 <div
-                  className={`w-11 h-11 rounded-xl flex items-center justify-center mb-4 bg-gradient-to-br ${f.gradient}`}
+                  className={cn(
+                    'w-10 h-10 rounded-xl flex items-center justify-center mb-4 bg-gradient-to-br',
+                    f.gradient,
+                  )}
                 >
                   <f.icon className="w-5 h-5 text-white" />
                 </div>
-                <h3 className="text-base font-bold mb-2 text-white">{f.title}</h3>
-                <p className="text-sm text-white/45 leading-relaxed">{f.description}</p>
+                <h3 className="text-sm font-bold mb-1.5 text-gray-900">{f.title}</h3>
+                <p className="text-sm text-gray-500 leading-relaxed">{f.description}</p>
               </motion.div>
             </AnimatedSection>
           ))}
         </div>
       </section>
 
-      {/* ── Feature spotlights ── */}
-      <section id="spotlight" className="py-24 max-w-6xl mx-auto px-6 space-y-32">
-        {spotlights.map((s, i) => (
-          <AnimatedSection key={s.tag}>
-            <div
-              className={`flex flex-col gap-12 lg:gap-20 items-center ${
-                i % 2 === 0 ? 'lg:flex-row' : 'lg:flex-row-reverse'
-              }`}
-            >
-              {/* Text */}
-              <div className="flex-1 max-w-lg">
+      {/* ── For Operators ── */}
+      <section
+        id="operators"
+        className="py-20 px-5"
+        style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #2e1065 100%)' }}
+      >
+        <div className="max-w-5xl mx-auto">
+          <AnimatedSection>
+            <motion.div variants={fadeUp} custom={0} className="text-center mb-12">
+              <p className="text-sm font-semibold uppercase tracking-widest text-violet-300 mb-3">
+                For travel professionals
+              </p>
+              <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-4">
+                Are you a travel operator?
+              </h2>
+              <p className="text-white/55 text-base max-w-xl mx-auto">
+                Grow your business on Travelfy. List your packages, manage bookings, and reach
+                thousands of Filipino travelers.
+              </p>
+            </motion.div>
+          </AnimatedSection>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-10">
+            {[
+              {
+                icon: Package,
+                title: 'Create Tour Packages',
+                body: 'List day trips, island hops, multi-day adventures and more. Set prices in PHP or any currency.',
+                color: '#a78bfa',
+              },
+              {
+                icon: Users,
+                title: 'Manage Bookings',
+                body: 'See incoming requests, confirm reservations, and message guests — all in one dashboard.',
+                color: '#c084fc',
+              },
+              {
+                icon: TrendingUp,
+                title: 'Grow Your Business',
+                body: 'Reach travelers who are already planning their trips. Zero commission to start.',
+                color: '#818cf8',
+              },
+            ].map((item, i) => (
+              <AnimatedSection key={item.title}>
                 <motion.div
-                  variants={fadeIn}
-                  custom={0}
-                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-5"
+                  variants={fadeUp}
+                  custom={i}
+                  className="p-5 rounded-2xl h-full"
                   style={{
-                    background: 'rgba(37,99,235,0.12)',
-                    border: '1px solid rgba(37,99,235,0.25)',
-                    color: '#93c5fd',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)',
                   }}
                 >
-                  <s.icon className="w-3 h-3" />
-                  {s.tag}
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
+                    style={{ background: `${item.color}20`, border: `1px solid ${item.color}35` }}
+                  >
+                    <item.icon className="w-5 h-5" style={{ color: item.color }} />
+                  </div>
+                  <h3 className="font-bold text-white mb-2">{item.title}</h3>
+                  <p className="text-sm text-white/50 leading-relaxed">{item.body}</p>
                 </motion.div>
-                <motion.h2
-                  variants={fadeUp}
-                  custom={1}
-                  className="text-3xl md:text-4xl font-extrabold tracking-tight mb-5 leading-tight"
-                >
-                  {s.headline}
-                </motion.h2>
-                <motion.p variants={fadeUp} custom={2} className="text-white/50 text-base leading-relaxed mb-8">
-                  {s.body}
-                </motion.p>
-                <motion.button
-                  variants={fadeUp}
-                  custom={3}
-                  onClick={() => navigate('/login')}
-                  className="group flex items-center gap-2 text-sm font-semibold transition-colors"
-                  style={{ color: '#60a5fa' }}
-                  whileHover={{ x: 4 }}
-                >
-                  Try it free
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </motion.button>
-              </div>
+              </AnimatedSection>
+            ))}
+          </div>
 
-              {/* Visual */}
-              <motion.div variants={fadeIn} custom={1} className="flex-1 w-full">
-                {s.visual}
-              </motion.div>
-            </div>
+          <AnimatedSection className="text-center">
+            <motion.button
+              variants={fadeUp}
+              custom={0}
+              onClick={() => navigate('/login')}
+              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl font-semibold text-base text-white transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',
+                boxShadow: '0 4px 24px rgba(124,58,237,0.45)',
+              }}
+            >
+              Register as Operator
+              <ArrowRight className="w-4 h-4" />
+            </motion.button>
           </AnimatedSection>
-        ))}
+        </div>
       </section>
 
-      {/* ── CTA ── */}
-      <section id="cta" className="py-32 px-6">
+      {/* ── Live Tour Packages ── */}
+      <section ref={toursRef} id="tours" className="py-20 px-5 max-w-6xl mx-auto">
+        <AnimatedSection>
+          <div className="text-center mb-12">
+            <motion.p
+              variants={fadeIn}
+              custom={0}
+              className="text-sm font-semibold uppercase tracking-widest mb-3 text-violet-600"
+            >
+              Live packages
+            </motion.p>
+            <motion.h2
+              variants={fadeUp}
+              custom={1}
+              className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-4"
+            >
+              Browse Tour Packages
+            </motion.h2>
+            <motion.p variants={fadeUp} custom={2} className="text-gray-500 text-base max-w-xl mx-auto">
+              Curated experiences from verified Filipino travel operators. No login needed to browse.
+            </motion.p>
+          </div>
+        </AnimatedSection>
+
+        {/* Loading */}
+        {pkgLoading && (
+          <div className="flex items-center justify-center py-20 gap-3 text-gray-400">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span className="text-sm">Loading packages…</span>
+          </div>
+        )}
+
+        {/* Error */}
+        {!pkgLoading && pkgError && (
+          <div className="flex items-center justify-center py-20 gap-3 text-red-500">
+            <AlertCircle className="w-5 h-5" />
+            <span className="text-sm">{pkgError}</span>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!pkgLoading && !pkgError && packages.length === 0 && (
+          <AnimatedSection>
+            <motion.div
+              variants={fadeUp}
+              custom={0}
+              className="text-center py-20 rounded-2xl"
+              style={{ background: '#fff', border: '1px solid #e5e7eb' }}
+            >
+              <div
+                className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
+                style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' }}
+              >
+                <Package className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Coming soon</h3>
+              <p className="text-sm text-gray-500 max-w-xs mx-auto">
+                Operators are adding packages right now. Check back soon or{' '}
+                <button
+                  onClick={() => navigate('/login')}
+                  className="text-violet-600 font-medium hover:underline"
+                >
+                  register as an operator
+                </button>{' '}
+                to list yours first.
+              </p>
+            </motion.div>
+          </AnimatedSection>
+        )}
+
+        {/* Package grid */}
+        {!pkgLoading && !pkgError && packages.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {packages.map((pkg, i) => (
+              <AnimatedSection key={pkg.id}>
+                <motion.div variants={fadeUp} custom={i % 3} className="h-full">
+                  <TourPackageCard pkg={pkg} onBook={handleBookNow} />
+                </motion.div>
+              </AnimatedSection>
+            ))}
+          </div>
+        )}
+
+        {/* View all CTA */}
+        {!pkgLoading && !pkgError && packages.length > 0 && (
+          <AnimatedSection className="mt-10 text-center">
+            <motion.button
+              variants={fadeUp}
+              custom={0}
+              onClick={() => navigate('/login', { state: { redirect: '/tours' } })}
+              className="inline-flex items-center gap-2 px-7 py-3 rounded-2xl font-semibold text-sm text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                boxShadow: '0 2px 16px rgba(79,70,229,0.35)',
+              }}
+            >
+              View All Packages
+              <ArrowRight className="w-4 h-4" />
+            </motion.button>
+          </AnimatedSection>
+        )}
+      </section>
+
+      {/* ── Final CTA ── */}
+      <section
+        className="py-24 px-5"
+        style={{ background: 'linear-gradient(135deg, #1e1b4b 0%, #2e1065 100%)' }}
+      >
         <AnimatedSection>
           <motion.div
             variants={fadeUp}
             custom={0}
-            className="max-w-2xl mx-auto text-center rounded-3xl p-12 relative overflow-hidden"
+            className="max-w-2xl mx-auto text-center rounded-3xl p-10 sm:p-14 relative overflow-hidden"
             style={{
-              background: 'rgba(37,99,235,0.1)',
-              border: '1px solid rgba(37,99,235,0.2)',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
             }}
           >
-            {/* Glow */}
             <div
-              className="absolute inset-0 pointer-events-none rounded-3xl"
+              className="absolute inset-0 rounded-3xl pointer-events-none"
               style={{
-                background: 'radial-gradient(ellipse 60% 60% at 50% 0%, rgba(37,99,235,0.25) 0%, transparent 70%)',
+                background:
+                  'radial-gradient(ellipse 70% 60% at 50% 0%, rgba(124,58,237,0.3) 0%, transparent 70%)',
               }}
             />
-
             <div className="relative z-10">
-              <Plane
-                className="mx-auto mb-6 w-10 h-10"
-                style={{ color: '#60a5fa' }}
-              />
-              <h2 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-5">
-                Start planning your{' '}
-                <span
+              <div
+                className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-6"
+                style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' }}
+              >
+                <Plane className="w-7 h-7 text-white" />
+              </div>
+              <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-4">
+                Ready for your next adventure?
+              </h2>
+              <p className="text-white/50 text-base mb-10 max-w-md mx-auto">
+                Join Filipino travelers who plan smarter with Travelfy. Free to start, no credit
+                card needed.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <button
+                  onClick={() => navigate('/login')}
+                  className="group inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl font-bold text-base text-white transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                   style={{
-                    background: 'linear-gradient(135deg, #2563EB 0%, #38BDF8 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
+                    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+                    boxShadow: '0 4px 32px rgba(79,70,229,0.5)',
                   }}
                 >
-                  next trip
-                </span>
-              </h2>
-              <p className="text-white/50 text-lg mb-10 max-w-md mx-auto">
-                Join thousands of travellers using Travelfy to explore the world smarter.
-              </p>
-              <button
-                onClick={() => navigate('/login')}
-                className="group inline-flex items-center gap-2 px-8 py-4 rounded-2xl font-bold text-base transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                style={{
-                  background: 'linear-gradient(135deg, #2563EB 0%, #38BDF8 100%)',
-                  boxShadow: '0 4px 32px rgba(37,99,235,0.5)',
-                }}
-              >
-                Get Started Free
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
-              </button>
+                  Get Started Free
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-0.5 transition-transform" />
+                </button>
+                <button
+                  onClick={() => navigate('/login')}
+                  className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl font-medium text-base text-white/70 border border-white/15 hover:border-white/30 hover:text-white transition-all duration-200"
+                >
+                  Sign In
+                </button>
+              </div>
             </div>
           </motion.div>
         </AnimatedSection>
@@ -814,27 +1005,39 @@ export default function Landing() {
 
       {/* ── Footer ── */}
       <footer
-        className="py-10 px-6 border-t"
-        style={{ borderColor: 'rgba(255,255,255,0.06)' }}
+        className="py-10 px-5"
+        style={{ background: '#0f0a28', borderTop: '1px solid rgba(255,255,255,0.06)' }}
       >
-        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-5">
+          {/* Brand */}
           <div className="flex items-center gap-2">
             <div
               className="w-7 h-7 rounded-lg flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #2563EB 0%, #38BDF8 100%)' }}
+              style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' }}
             >
               <Plane className="w-3.5 h-3.5 text-white" />
             </div>
-            <span className="font-bold text-sm">Travelfy</span>
+            <span className="font-bold text-sm text-white">Travelfy</span>
           </div>
 
-          <div className="flex items-center gap-6 text-sm text-white/40">
-            <a href="#" className="hover:text-white/70 transition-colors">Privacy</a>
-            <a href="#" className="hover:text-white/70 transition-colors">Terms</a>
-            <a href="#" className="hover:text-white/70 transition-colors">Contact</a>
-          </div>
+          <p className="text-xs text-white/30 text-center">
+            Travelfy &copy; 2026 &middot; Built for Filipino travelers
+          </p>
 
-          <p className="text-xs text-white/25">© 2026 Travelfy. All rights reserved.</p>
+          <div className="flex items-center gap-5 text-sm text-white/40">
+            <button
+              onClick={() => navigate('/login')}
+              className="hover:text-white/70 transition-colors"
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => navigate('/login')}
+              className="hover:text-white/70 transition-colors"
+            >
+              Create Account
+            </button>
+          </div>
         </div>
       </footer>
     </div>

@@ -41,6 +41,7 @@ import Tours from '@/pages/Tours'
 import Landing from '@/pages/Landing'
 import InstallPrompt from '@/components/common/InstallPrompt'
 import PWAUpdatePrompt from '@/components/common/PWAUpdatePrompt'
+import OnboardingWelcome from '@/components/common/OnboardingWelcome'
 import { motion } from 'framer-motion'
 import { Plane } from 'lucide-react'
 
@@ -131,6 +132,7 @@ export default function App() {
             <Routes>
               <Route path="*" element={<AppRoutes />} />
             </Routes>
+            <OnboardingWelcome />
             <InstallPrompt />
             <PWAUpdatePrompt />
           </BrowserRouter>

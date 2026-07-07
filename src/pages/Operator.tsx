@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   Building2, Package, Users, Plus, Edit2, Trash2,
   Eye, EyeOff, CheckCircle2, XCircle, Clock,
-  DollarSign, MapPin, Calendar, Tag,
+  DollarSign, MapPin, Calendar, Tag, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
@@ -22,6 +22,18 @@ import { supabase } from '@/lib/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+interface PackageActivity {
+  time: string
+  title: string
+  location: string
+}
+
+interface PackageDay {
+  dayNumber: number
+  title: string
+  activities: PackageActivity[]
+}
+
 interface TourPackage {
   id: string
   operatorId: string
@@ -34,6 +46,7 @@ interface TourPackage {
   maxSlots: number
   coverImage: string
   status: 'draft' | 'published' | 'closed'
+  itinerary: string
   createdAt: string
 }
 
@@ -64,6 +77,7 @@ function mapPackageRow(row: Record<string, unknown>): TourPackage {
     maxSlots: Number(row.max_slots ?? 10),
     coverImage: String(row.cover_image ?? ''),
     status: (row.status as TourPackage['status']) ?? 'draft',
+    itinerary: String(row.itinerary ?? '[]'),
     createdAt: String(row.created_at ?? ''),
   }
 }
@@ -93,6 +107,7 @@ const defaultPackage = (): Omit<TourPackage, 'id' | 'operatorId' | 'createdAt'> 
   maxSlots: 10,
   coverImage: '',
   status: 'draft',
+  itinerary: '[]',
 })
 
 function packageStatusBadge(status: TourPackage['status']) {
@@ -318,13 +333,188 @@ interface PackageDialogProps {
   saving: boolean
 }
 
+// ── Itinerary Builder ──────────────────────────────────────────────────────────
+
+interface ItineraryBuilderProps {
+  days: PackageDay[]
+  onChange: (days: PackageDay[]) => void
+}
+
+function ItineraryBuilder({ days, onChange }: ItineraryBuilderProps) {
+  const [expanded, setExpanded] = useState(false)
+
+  const addDay = () => {
+    const next: PackageDay = {
+      dayNumber: days.length + 1,
+      title: '',
+      activities: [],
+    }
+    onChange([...days, next])
+    setExpanded(true)
+  }
+
+  const removeDay = (idx: number) => {
+    const updated = days
+      .filter((_, i) => i !== idx)
+      .map((d, i) => ({ ...d, dayNumber: i + 1 }))
+    onChange(updated)
+  }
+
+  const updateDay = (idx: number, patch: Partial<PackageDay>) => {
+    onChange(days.map((d, i) => i === idx ? { ...d, ...patch } : d))
+  }
+
+  const addActivity = (dayIdx: number) => {
+    const act: PackageActivity = { time: '', title: '', location: '' }
+    const updated = days.map((d, i) =>
+      i === dayIdx ? { ...d, activities: [...d.activities, act] } : d
+    )
+    onChange(updated)
+  }
+
+  const updateActivity = (dayIdx: number, actIdx: number, patch: Partial<PackageActivity>) => {
+    onChange(days.map((d, i) => {
+      if (i !== dayIdx) return d
+      return {
+        ...d,
+        activities: d.activities.map((a, j) => j === actIdx ? { ...a, ...patch } : a),
+      }
+    }))
+  }
+
+  const removeActivity = (dayIdx: number, actIdx: number) => {
+    onChange(days.map((d, i) => {
+      if (i !== dayIdx) return d
+      return { ...d, activities: d.activities.filter((_, j) => j !== actIdx) }
+    }))
+  }
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center justify-between rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm font-medium hover:bg-muted transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          <Calendar className="h-3.5 w-3.5 text-violet-600" />
+          Itinerary
+          {days.length > 0 && (
+            <span className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 rounded-full px-1.5 py-0.5 tabular-nums">
+              {days.length} {days.length === 1 ? 'day' : 'days'}
+            </span>
+          )}
+        </span>
+        {expanded ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+      </button>
+
+      {expanded && (
+        <div className="space-y-3 max-h-72 overflow-y-auto pr-0.5">
+          {days.map((day, dayIdx) => (
+            <div key={dayIdx} className="rounded-xl border border-border bg-muted/20 p-3 space-y-2">
+              {/* Day header */}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-violet-600 bg-violet-100 dark:bg-violet-900/40 rounded-full px-2 py-0.5 shrink-0 tabular-nums">
+                  Day {day.dayNumber}
+                </span>
+                <Input
+                  className="h-7 text-xs flex-1"
+                  placeholder="Day title e.g. Arrive in Batanes"
+                  value={day.title}
+                  onChange={e => updateDay(dayIdx, { title: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeDay(dayIdx)}
+                  className="h-7 w-7 shrink-0 flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  title="Remove day"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </div>
+
+              {/* Activities */}
+              {day.activities.map((act, actIdx) => (
+                <div key={actIdx} className="flex items-center gap-1.5">
+                  <Input
+                    className="h-7 text-xs w-16 shrink-0"
+                    placeholder="HH:MM"
+                    value={act.time}
+                    onChange={e => updateActivity(dayIdx, actIdx, { time: e.target.value })}
+                  />
+                  <Input
+                    className="h-7 text-xs flex-1 min-w-0"
+                    placeholder="Activity"
+                    value={act.title}
+                    onChange={e => updateActivity(dayIdx, actIdx, { title: e.target.value })}
+                  />
+                  <Input
+                    className="h-7 text-xs flex-1 min-w-0"
+                    placeholder="Location"
+                    value={act.location}
+                    onChange={e => updateActivity(dayIdx, actIdx, { location: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeActivity(dayIdx, actIdx)}
+                    className="h-7 w-6 shrink-0 flex items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    title="Remove activity"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => addActivity(dayIdx)}
+                className="w-full rounded-lg border border-dashed border-border py-1.5 text-[11px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors flex items-center justify-center gap-1"
+              >
+                <Plus className="h-3 w-3" />
+                Add Activity
+              </button>
+            </div>
+          ))}
+
+          <button
+            type="button"
+            onClick={addDay}
+            className="w-full rounded-xl border border-dashed border-violet-300 dark:border-violet-700 py-2 text-xs text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/20 transition-colors flex items-center justify-center gap-1.5 font-medium"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Day
+          </button>
+        </div>
+      )}
+
+      {!expanded && days.length === 0 && (
+        <button
+          type="button"
+          onClick={addDay}
+          className="w-full rounded-xl border border-dashed border-violet-300 dark:border-violet-700 py-2 text-xs text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/20 transition-colors flex items-center justify-center gap-1.5 font-medium"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add Day
+        </button>
+      )}
+    </div>
+  )
+}
+
 function PackageDialog({ open, onClose, draft, onChange, onSave, saving }: PackageDialogProps) {
   const set = <K extends keyof PackageDraft>(k: K, v: PackageDraft[K]) =>
     onChange({ ...draft, [k]: v })
 
+  const itineraryDays: PackageDay[] = (() => {
+    try { return JSON.parse(draft.itinerary || '[]') } catch { return [] }
+  })()
+
+  const setItinerary = (days: PackageDay[]) =>
+    onChange({ ...draft, itinerary: JSON.stringify(days) })
+
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
-      <DialogContent>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{draft.id ? 'Edit Package' : 'New Tour Package'}</DialogTitle>
         </DialogHeader>
@@ -447,6 +637,9 @@ function PackageDialog({ open, onClose, draft, onChange, onSave, saving }: Packa
               ))}
             </div>
           </div>
+
+          {/* Itinerary */}
+          <ItineraryBuilder days={itineraryDays} onChange={setItinerary} />
         </div>
 
         <DialogFooter className="mt-2">
@@ -587,6 +780,7 @@ export default function Operator() {
       maxSlots: pkg.maxSlots,
       coverImage: pkg.coverImage,
       status: pkg.status,
+      itinerary: pkg.itinerary || '[]',
     })
     setDialogOpen(true)
   }
@@ -606,6 +800,7 @@ export default function Operator() {
       max_slots: draft.maxSlots,
       cover_image: draft.coverImage,
       status: draft.status,
+      itinerary: draft.itinerary || '[]',
     }
     await supabase.from('tour_packages').upsert(row)
     setSaving(false)
