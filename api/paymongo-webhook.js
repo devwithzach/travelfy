@@ -68,6 +68,35 @@ export default async function handler(req, res) {
           paymongo_session_id: sessionId,
         })
         .eq('id', bookingId)
+
+      // Fetch booking details for confirmation email
+      const { data: bookingData } = await supabase
+        .from('tour_bookings')
+        .select('traveler_email, traveler_name, package_id, tour_packages(name, destination, duration_days, price, currency)')
+        .eq('id', bookingId)
+        .single()
+
+      if (bookingData) {
+        const pkg = bookingData.tour_packages
+        const baseUrl = process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : 'https://travelfy-global.vercel.app'
+
+        await fetch(`${baseUrl}/api/send-booking-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: bookingData.traveler_email,
+            travelerName: bookingData.traveler_name,
+            packageName: pkg?.name ?? '',
+            destination: pkg?.destination ?? '',
+            durationDays: pkg?.duration_days ?? 0,
+            price: pkg?.price ?? 0,
+            currency: pkg?.currency ?? 'PHP',
+            bookingId,
+          }),
+        }).catch(() => {})
+      }
     }
   }
 

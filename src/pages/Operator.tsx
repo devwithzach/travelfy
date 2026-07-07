@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Building2, Package, Users, Plus, Edit2, Trash2,
@@ -794,6 +795,11 @@ export default function Operator() {
   const [loadingPackages, setLoadingPackages] = useState(false)
   const [loadingBookings, setLoadingBookings] = useState(false)
 
+  const [earnings, setEarnings] = useState<{ month: string; revenue: number; bookings: number }[]>([])
+  const [loadingEarnings, setLoadingEarnings] = useState(false)
+  const [totalRevenue, setTotalRevenue] = useState(0)
+  const [totalConfirmed, setTotalConfirmed] = useState(0)
+
   const [dialogOpen, setDialogOpen] = useState(false)
   const [draft, setDraft] = useState<PackageDraft>(defaultPackage())
   const [saving, setSaving] = useState(false)
@@ -843,12 +849,49 @@ export default function Operator() {
     setLoadingBookings(false)
   }, [user])
 
+  const fetchEarnings = useCallback(async () => {
+    if (!user) return
+    setLoadingEarnings(true)
+    const { data } = await supabase
+      .from('tour_bookings')
+      .select('created_at, status, tour_packages(price, currency)')
+      .eq('operator_id', user.id)
+      .eq('status', 'confirmed')
+      .order('created_at', { ascending: true })
+
+    if (data) {
+      const byMonth: Record<string, { revenue: number; bookings: number }> = {}
+      let total = 0
+      data.forEach(b => {
+        const pkg = b.tour_packages as { price?: number; currency?: string } | null
+        const price = Number(pkg?.price ?? 0)
+        const month = (b.created_at as string).slice(0, 7)
+        if (!byMonth[month]) byMonth[month] = { revenue: 0, bookings: 0 }
+        byMonth[month].revenue += price
+        byMonth[month].bookings++
+        total += price
+      })
+      const sorted = Object.entries(byMonth)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([month, v]) => ({
+          month: new Date(month + '-01').toLocaleDateString('en-PH', { month: 'short', year: '2-digit' }),
+          revenue: v.revenue,
+          bookings: v.bookings,
+        }))
+      setEarnings(sorted)
+      setTotalRevenue(total)
+      setTotalConfirmed(data.length)
+    }
+    setLoadingEarnings(false)
+  }, [user])
+
   useEffect(() => {
     if (hasAccess) {
       fetchPackages()
       fetchBookings()
+      fetchEarnings()
     }
-  }, [hasAccess, fetchPackages, fetchBookings])
+  }, [hasAccess, fetchPackages, fetchBookings, fetchEarnings])
 
   // ── Package mutations ─────────────────────────────────────────────────────
 
@@ -913,6 +956,38 @@ export default function Operator() {
   const updateBookingStatus = async (id: string, status: TourBooking['status']) => {
     await supabase.from('tour_bookings').update({ status }).eq('id', id)
     setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b))
+
+    if (status === 'confirmed') {
+      const bk = bookings.find(b => b.id === id)
+      if (bk) {
+        const pkg = packages.find(p => p.id === bk.packageId)
+        fetch('/api/send-booking-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: bk.travelerEmail,
+            travelerName: bk.travelerName,
+            packageName: bk.packageName,
+            destination: pkg?.destination ?? '',
+            durationDays: pkg?.durationDays ?? 0,
+            price: pkg?.price ?? 0,
+            currency: pkg?.currency ?? 'PHP',
+            bookingId: bk.id,
+          }),
+        }).catch(() => {})
+
+        fetch('/api/push-notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: bk.travelerId,
+            title: 'Booking Confirmed!',
+            message: `Your booking for ${bk.packageName} has been confirmed.`,
+            url: '/tours',
+          }),
+        }).catch(() => {})  // fire-and-forget, don't block UI
+      }
+    }
   }
 
   // ── Render: loading ───────────────────────────────────────────────────────
@@ -972,6 +1047,9 @@ export default function Operator() {
             <TabsTrigger value="bookings" className="flex-1">
               Bookings
             </TabsTrigger>
+            <TabsTrigger value="earnings" className="flex-1">
+              Earnings
+            </TabsTrigger>
           </TabsList>
 
           {/* ── Packages tab ─────────────────────────────────────────────── */}
@@ -1029,6 +1107,72 @@ export default function Operator() {
                     />
                   ))}
                 </AnimatePresence>
+              </div>
+            )}
+          </TabsContent>
+          {/* ── Earnings tab ──────────────────────────────────────────────── */}
+          <TabsContent value="earnings">
+            {loadingEarnings ? (
+              <div className="flex justify-center py-16">
+                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : earnings.length === 0 ? (
+              <EmptyState
+                icon={DollarSign}
+                title="No earnings yet"
+                description="Confirmed bookings will appear here as revenue."
+              />
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <Card>
+                    <CardContent className="p-4">
+                      <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
+                      <p className="text-2xl font-bold tabular-nums">
+                        ₱{totalRevenue.toLocaleString()}
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <p className="text-xs text-muted-foreground mb-1">Confirmed</p>
+                      <p className="text-2xl font-bold tabular-nums">{totalConfirmed}</p>
+                      <p className="text-xs text-muted-foreground">bookings</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-3">Revenue by Month (PHP)</p>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <BarChart data={earnings} margin={{ top: 4, right: 4, bottom: 0, left: -10 }}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                        <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                        <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => `₱${(v / 1000).toFixed(0)}k`} />
+                        <Tooltip
+                          formatter={(value: number) => [`₱${value.toLocaleString()}`, 'Revenue']}
+                          contentStyle={{ fontSize: 12 }}
+                        />
+                        <Bar dataKey="revenue" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                <div className="space-y-2">
+                  {[...earnings].reverse().map(row => (
+                    <Card key={row.month}>
+                      <CardContent className="p-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">{row.month}</p>
+                          <p className="text-xs text-muted-foreground">{row.bookings} booking{row.bookings !== 1 ? 's' : ''}</p>
+                        </div>
+                        <p className="text-base font-bold tabular-nums">₱{row.revenue.toLocaleString()}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </div>
             )}
           </TabsContent>

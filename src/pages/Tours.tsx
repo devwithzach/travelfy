@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { supabase } from '@/lib/supabase'
+import { cn } from '@/utils/cn'
 
 // ---------------------------------------------------------------------------
 // Local types
@@ -35,6 +36,7 @@ interface TourPackage {
   price: number
   currency: string
   maxSlots: number
+  availableSlots: number | null
   coverImage: string
   status: 'published'
   createdAt: string
@@ -107,6 +109,63 @@ function Spinner() {
 }
 
 // ---------------------------------------------------------------------------
+// Star rating input
+// ---------------------------------------------------------------------------
+
+function StarRating({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map(n => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onChange(n)}
+          className={cn(
+            'text-2xl transition-colors leading-none',
+            n <= value ? 'text-amber-400' : 'text-muted-foreground/30'
+          )}
+        >
+          ★
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Push notification helpers
+// ---------------------------------------------------------------------------
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const raw = atob(base64)
+  const array = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) array[i] = raw.charCodeAt(i)
+  return array as Uint8Array<ArrayBuffer>
+}
+
+async function registerPushSubscription(userId: string): Promise<void> {
+  const VAPID_PUBLIC = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined
+  if (!VAPID_PUBLIC) return
+
+  const reg = await navigator.serviceWorker.ready
+  let sub = await reg.pushManager.getSubscription()
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC),
+    })
+  }
+
+  await fetch('/api/push-subscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subscription: sub.toJSON(), userId }),
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -141,6 +200,31 @@ export default function Tours() {
   const [paymongoLoading, setPaymongoLoading] = useState(false)
   const [bookError, setBookError] = useState<string | null>(null)
 
+  // Review state
+  const [reviewingBooking, setReviewingBooking] = useState<MyBooking | null>(null)
+  const [reviewRating, setReviewRating] = useState(5)
+  const [reviewComment, setReviewComment] = useState('')
+  const [submittingReview, setSubmittingReview] = useState(false)
+  const [reviewError, setReviewError] = useState<string | null>(null)
+  const [myReviews, setMyReviews] = useState<Record<string, number>>({})
+
+  // Package ratings state (for Browse tab)
+  const [pkgRatings, setPkgRatings] = useState<Record<string, { avg: number; count: number }>>({})
+
+  // ---------------------------------------------------------------------------
+  // Push subscription: re-register if permission already granted
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!user || !('serviceWorker' in navigator) || !('PushManager' in window)) return
+    if (Notification.permission === 'default') {
+      // Don't auto-prompt — wait until user books something
+      return
+    }
+    if (Notification.permission === 'granted') {
+      registerPushSubscription(user.id).catch(() => {})
+    }
+  }, [user?.id])
+
   // ---------------------------------------------------------------------------
   // Fetch tour packages
   // ---------------------------------------------------------------------------
@@ -166,6 +250,7 @@ export default function Tours() {
               price: Number(r.price),
               currency: r.currency ?? 'PHP',
               maxSlots: r.max_slots,
+              availableSlots: r.available_slots != null ? Number(r.available_slots) : null,
               coverImage: r.cover_image ?? '',
               status: 'published',
               createdAt: r.created_at,
@@ -174,6 +259,25 @@ export default function Tours() {
         }
         setPackagesLoading(false)
       })
+
+    supabase.from('package_reviews')
+      .select('package_id, rating')
+      .then(({ data: reviews }) => {
+        if (!reviews) return
+        const map: Record<string, { sum: number; count: number }> = {}
+        reviews.forEach(r => {
+          const key = String(r.package_id)
+          if (!map[key]) map[key] = { sum: 0, count: 0 }
+          map[key].sum += r.rating
+          map[key].count++
+        })
+        const ratings: Record<string, { avg: number; count: number }> = {}
+        Object.entries(map).forEach(([k, v]) => {
+          ratings[k] = { avg: Math.round((v.sum / v.count) * 10) / 10, count: v.count }
+        })
+        setPkgRatings(ratings)
+      })
+
     return () => { cancelled = true }
   }, [])
 
@@ -203,6 +307,20 @@ export default function Tours() {
               createdAt: r.created_at,
             }))
           )
+
+          if (data.length > 0) {
+            const bookingIds = data.map(r => r.id)
+            supabase.from('package_reviews')
+              .select('booking_id, rating')
+              .in('booking_id', bookingIds)
+              .then(({ data: reviews }) => {
+                if (reviews) {
+                  const map: Record<string, number> = {}
+                  reviews.forEach(r => { map[String(r.booking_id)] = r.rating })
+                  setMyReviews(map)
+                }
+              })
+          }
         }
         setBookingsLoading(false)
       })
@@ -340,9 +458,38 @@ export default function Tours() {
       }
     }
 
+    // Request push notification permission now that user has shown intent
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted' && user) {
+          registerPushSubscription(user.id).catch(() => {})
+        }
+      })
+    }
+
     setSubmitting(false)
     setBookingPkg(null)
     fetchBookings()
+  }
+
+  // ---------------------------------------------------------------------------
+  // Submit review
+  // ---------------------------------------------------------------------------
+  const submitReview = async () => {
+    if (!reviewingBooking || !user) return
+    setSubmittingReview(true)
+    setReviewError(null)
+    const { error } = await supabase.from('package_reviews').upsert({
+      package_id: reviewingBooking.packageId,
+      booking_id: reviewingBooking.id,
+      traveler_id: user.id,
+      rating: reviewRating,
+      comment: reviewComment.trim(),
+    }, { onConflict: 'booking_id' })
+    setSubmittingReview(false)
+    if (error) { setReviewError(error.message); return }
+    setMyReviews(prev => ({ ...prev, [reviewingBooking.id]: reviewRating }))
+    setReviewingBooking(null)
   }
 
   // ---------------------------------------------------------------------------
@@ -415,6 +562,9 @@ export default function Tours() {
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
+
+  // Suppress unused var warning — bookedPackageIds is used via bookingByPackageId
+  void bookedPackageIds
 
   return (
     <div>
@@ -502,6 +652,7 @@ export default function Tours() {
               <AnimatePresence>
                 {filteredPackages.map((pkg, i) => {
                   const existingBooking = bookingByPackageId.get(pkg.id)
+                  const isFullyBooked = pkg.availableSlots === 0
                   return (
                     <motion.div
                       key={pkg.id}
@@ -547,8 +698,16 @@ export default function Tours() {
                             </span>
                             <span className="flex items-center gap-1">
                               <Users className="h-3.5 w-3.5 shrink-0" />
-                              {pkg.maxSlots} slots
+                              {pkg.availableSlots != null
+                                ? `${pkg.availableSlots} of ${pkg.maxSlots} slots left`
+                                : `${pkg.maxSlots} slots`}
                             </span>
+                            {pkgRatings[pkg.id] && (
+                              <span className="flex items-center gap-0.5 text-amber-500 font-semibold">
+                                ★ {pkgRatings[pkg.id].avg}
+                                <span className="text-muted-foreground font-normal">({pkgRatings[pkg.id].count})</span>
+                              </span>
+                            )}
                           </div>
 
                           {/* Description */}
@@ -559,7 +718,9 @@ export default function Tours() {
                           )}
 
                           {/* Action */}
-                          {!existingBooking ? (
+                          {isFullyBooked ? (
+                            <Button size="sm" className="w-full mt-1" disabled>Fully Booked</Button>
+                          ) : !existingBooking ? (
                             <Button
                               size="sm"
                               className="w-full mt-1"
@@ -672,6 +833,28 @@ export default function Tours() {
                             Trip already created
                           </p>
                         )}
+
+                        {booking.status === 'confirmed' && (
+                          myReviews[booking.id] ? (
+                            <span className="text-[11px] text-amber-600 flex items-center gap-0.5">
+                              {'★'.repeat(myReviews[booking.id])} You reviewed this
+                            </span>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="w-full h-8 text-xs gap-1.5 text-amber-600 border-amber-200 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                              onClick={() => {
+                                setReviewingBooking(booking)
+                                setReviewRating(5)
+                                setReviewComment('')
+                                setReviewError(null)
+                              }}
+                            >
+                              ★ Write a Review
+                            </Button>
+                          )
+                        )}
                       </CardContent>
                     </Card>
                   </motion.div>
@@ -758,6 +941,43 @@ export default function Tours() {
                 : bookingPkg?.currency === 'PHP'
                 ? 'Confirm & Pay'
                 : 'Confirm Booking'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Review dialog                                                        */}
+      {/* ------------------------------------------------------------------ */}
+      <Dialog open={!!reviewingBooking} onOpenChange={open => { if (!open) setReviewingBooking(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Write a Review</DialogTitle>
+          </DialogHeader>
+          {reviewingBooking && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">{reviewingBooking.packageName}</p>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Rating</Label>
+                <StarRating value={reviewRating} onChange={setReviewRating} />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Comment (optional)</Label>
+                <Textarea
+                  value={reviewComment}
+                  onChange={e => setReviewComment(e.target.value)}
+                  placeholder="Share your experience…"
+                  className="min-h-[80px]"
+                  disabled={submittingReview}
+                />
+              </div>
+              {reviewError && <p className="text-sm text-destructive">{reviewError}</p>}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setReviewingBooking(null)} disabled={submittingReview}>Cancel</Button>
+            <Button onClick={submitReview} disabled={submittingReview}>
+              {submittingReview ? 'Submitting…' : 'Submit Review'}
             </Button>
           </DialogFooter>
         </DialogContent>

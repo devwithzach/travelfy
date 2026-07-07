@@ -60,3 +60,28 @@ registerRoute(
     ],
   }),
 )
+
+self.addEventListener('push', (event: PushEvent) => {
+  let data: { title?: string; body?: string; url?: string } = {}
+  try { data = event.data?.json() ?? {} } catch { data = {} }
+
+  const title = data.title ?? 'Travelfy'
+  const options: NotificationOptions = {
+    body: data.body ?? '',
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-72.png',
+    data: { url: data.url ?? '/tours' },
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  )
+})
+
+self.addEventListener('notificationclick', (event: NotificationEvent) => {
+  event.notification.close()
+  const url = (event.notification.data as { url?: string })?.url ?? '/tours'
+  event.waitUntil(
+    self.clients.openWindow(url)
+  )
+})
