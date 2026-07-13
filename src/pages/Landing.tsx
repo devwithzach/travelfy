@@ -21,7 +21,6 @@ import {
   Users,
   TrendingUp,
   Loader2,
-  AlertCircle,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/utils/cn'
@@ -446,7 +445,6 @@ export default function Landing() {
 
   const [packages, setPackages] = useState<TourPackage[]>([])
   const [pkgLoading, setPkgLoading] = useState(true)
-  const [pkgError, setPkgError] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchPackages() {
@@ -459,17 +457,13 @@ export default function Landing() {
           .limit(6)
 
         if (error) {
-          // Table may not exist yet — treat as empty, not an error
-          if (error.code === '42P01') {
-            setPackages([])
-          } else {
-            setPkgError('Could not load packages.')
-          }
+          // Treat all errors as empty — packages are optional landing content
+          setPackages([])
         } else {
           setPackages(data ?? [])
         }
       } catch {
-        setPkgError('Could not load packages.')
+        setPackages([])
       } finally {
         setPkgLoading(false)
       }
@@ -872,16 +866,8 @@ export default function Landing() {
           </div>
         )}
 
-        {/* Error */}
-        {!pkgLoading && pkgError && (
-          <div className="flex items-center justify-center py-20 gap-3 text-red-500">
-            <AlertCircle className="w-5 h-5" />
-            <span className="text-sm">{pkgError}</span>
-          </div>
-        )}
-
         {/* Empty state */}
-        {!pkgLoading && !pkgError && packages.length === 0 && (
+        {!pkgLoading && packages.length === 0 && (
           <AnimatedSection>
             <motion.div
               variants={fadeUp}
@@ -911,7 +897,7 @@ export default function Landing() {
         )}
 
         {/* Package grid */}
-        {!pkgLoading && !pkgError && packages.length > 0 && (
+        {!pkgLoading && packages.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {packages.map((pkg, i) => (
               <AnimatedSection key={pkg.id}>
@@ -924,7 +910,7 @@ export default function Landing() {
         )}
 
         {/* View all CTA */}
-        {!pkgLoading && !pkgError && packages.length > 0 && (
+        {!pkgLoading && packages.length > 0 && (
           <AnimatedSection className="mt-10 text-center">
             <motion.button
               variants={fadeUp}
