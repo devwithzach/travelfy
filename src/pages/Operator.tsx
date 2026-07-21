@@ -5,7 +5,7 @@ import {
   Building2, Package, Users, Plus, Edit2, Trash2,
   Eye, EyeOff, CheckCircle2, XCircle, Clock,
   DollarSign, MapPin, Calendar, Tag, ChevronDown, ChevronUp,
-  Upload, ImageIcon,
+  Upload, ImageIcon, UserCircle, ExternalLink, Save,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
@@ -790,6 +790,14 @@ export default function Operator() {
   const [roleLoading, setRoleLoading] = useState(true)
   const [hasAccess, setHasAccess] = useState(false)
 
+  const [profileBio, setProfileBio] = useState('')
+  const [profileLogoUrl, setProfileLogoUrl] = useState('')
+  const [profilePhone, setProfilePhone] = useState('')
+  const [profileWebsite, setProfileWebsite] = useState('')
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSaved, setProfileSaved] = useState(false)
+  const [profileError, setProfileError] = useState<string | null>(null)
+
   const [packages, setPackages] = useState<TourPackage[]>([])
   const [bookings, setBookings] = useState<TourBooking[]>([])
   const [loadingPackages, setLoadingPackages] = useState(false)
@@ -812,11 +820,18 @@ export default function Operator() {
       try {
         const { data } = await supabase
           .from('user_profiles')
-          .select('role')
+          .select('role, bio, logo_url, phone, website')
           .eq('id', user.id)
           .single()
-        const role = (data as { role?: string } | null)?.role
+        const row = data as { role?: string; bio?: string; logo_url?: string; phone?: string; website?: string } | null
+        const role = row?.role
         setHasAccess(role === 'operator' || role === 'admin')
+        if (row) {
+          setProfileBio(row.bio ?? '')
+          setProfileLogoUrl(row.logo_url ?? '')
+          setProfilePhone(row.phone ?? '')
+          setProfileWebsite(row.website ?? '')
+        }
       } finally {
         setRoleLoading(false)
       }
@@ -892,6 +907,22 @@ export default function Operator() {
       fetchEarnings()
     }
   }, [hasAccess, fetchPackages, fetchBookings, fetchEarnings])
+
+  // ── Profile mutations ─────────────────────────────────────────────────────
+
+  const saveProfile = async () => {
+    if (!user) return
+    setProfileSaving(true)
+    setProfileError(null)
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ bio: profileBio, logo_url: profileLogoUrl, phone: profilePhone, website: profileWebsite })
+      .eq('id', user.id)
+    setProfileSaving(false)
+    if (error) { setProfileError(error.message); return }
+    setProfileSaved(true)
+    setTimeout(() => setProfileSaved(false), 3000)
+  }
 
   // ── Package mutations ─────────────────────────────────────────────────────
 
@@ -1042,13 +1073,16 @@ export default function Operator() {
         <Tabs defaultValue="packages">
           <TabsList className="w-full mb-4">
             <TabsTrigger value="packages" className="flex-1">
-              My Packages
+              Packages
             </TabsTrigger>
             <TabsTrigger value="bookings" className="flex-1">
               Bookings
             </TabsTrigger>
             <TabsTrigger value="earnings" className="flex-1">
               Earnings
+            </TabsTrigger>
+            <TabsTrigger value="profile" className="flex-1">
+              Profile
             </TabsTrigger>
           </TabsList>
 
@@ -1175,6 +1209,100 @@ export default function Operator() {
                 </div>
               </div>
             )}
+          </TabsContent>
+          {/* ── Profile tab ──────────────────────────────────────────────── */}
+          <TabsContent value="profile">
+            <div className="space-y-4">
+              {/* Avatar preview */}
+              <div className="flex items-center gap-4">
+                {profileLogoUrl ? (
+                  <img
+                    src={profileLogoUrl}
+                    alt="Logo preview"
+                    className="w-16 h-16 rounded-2xl object-cover border border-border"
+                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shrink-0">
+                    <UserCircle className="h-8 w-8 text-white" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold truncate">{user?.email}</p>
+                  <p className="text-xs text-muted-foreground">Operator profile</p>
+                </div>
+              </div>
+
+              {/* Logo URL */}
+              <div className="space-y-1.5">
+                <Label htmlFor="profile-logo">Logo URL</Label>
+                <Input
+                  id="profile-logo"
+                  placeholder="https://…"
+                  value={profileLogoUrl}
+                  onChange={e => setProfileLogoUrl(e.target.value)}
+                />
+              </div>
+
+              {/* Bio */}
+              <div className="space-y-1.5">
+                <Label htmlFor="profile-bio">Bio</Label>
+                <Textarea
+                  id="profile-bio"
+                  placeholder="Tell travelers about your company and what makes your tours special…"
+                  value={profileBio}
+                  onChange={e => setProfileBio(e.target.value)}
+                  className="min-h-[100px]"
+                />
+              </div>
+
+              {/* Phone */}
+              <div className="space-y-1.5">
+                <Label htmlFor="profile-phone">Phone</Label>
+                <Input
+                  id="profile-phone"
+                  type="tel"
+                  placeholder="+63 900 000 0000"
+                  value={profilePhone}
+                  onChange={e => setProfilePhone(e.target.value)}
+                />
+              </div>
+
+              {/* Website */}
+              <div className="space-y-1.5">
+                <Label htmlFor="profile-website">Website</Label>
+                <Input
+                  id="profile-website"
+                  type="url"
+                  placeholder="https://yourcompany.com"
+                  value={profileWebsite}
+                  onChange={e => setProfileWebsite(e.target.value)}
+                />
+              </div>
+
+              {profileError && (
+                <p className="text-sm text-destructive">{profileError}</p>
+              )}
+
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1 gap-1.5"
+                  onClick={saveProfile}
+                  disabled={profileSaving}
+                >
+                  <Save className="h-4 w-4" />
+                  {profileSaving ? 'Saving…' : profileSaved ? 'Saved!' : 'Save Profile'}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={() => navigate(`/operator/${user?.id}`)}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  View Public Profile
+                </Button>
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

@@ -5,7 +5,7 @@ import {
   Plane, Building2, Map, ListChecks, DollarSign,
   AlertCircle, Clock, CalendarDays, ChevronRight,
   TrendingUp, CheckSquare, FileText, Globe, Circle, Check, MapPin, Plus, Pencil,
-  ArrowLeftRight, BookMarked, Users, Share2, Stamp, RefreshCw
+  ArrowLeftRight, BookMarked, Users, Share2, Stamp, RefreshCw, Package, Calendar
 } from 'lucide-react'
 import { useTrip } from '@/contexts/TripContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -22,6 +22,7 @@ import ProfileSheet from '@/components/common/ProfileSheet'
 import { computeExpiryAlerts } from '@/utils/expiry'
 import { cn } from '@/utils/cn'
 import type { TripData } from '@/types'
+import { supabase } from '@/lib/supabase'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -112,6 +113,42 @@ export default function Dashboard() {
   const expiryAlerts = activeTripId ? computeExpiryAlerts(trip.passport, trip.visas, tripInfo, now) : []
 
   const [quickAddOpen, setQuickAddOpen] = useState(false)
+
+  const [upcomingTour, setUpcomingTour] = useState<{
+    id: string
+    packageName: string
+    destination: string
+    durationDays: number
+    price: number
+    currency: string
+    bookedAt: string
+  } | null>(null)
+
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('tour_bookings')
+      .select('id, created_at, tour_packages(name, destination, duration_days, price, currency)')
+      .eq('traveler_id', user.id)
+      .eq('status', 'confirmed')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          const pkg = data.tour_packages as { name?: string; destination?: string; duration_days?: number; price?: number; currency?: string } | null
+          setUpcomingTour({
+            id: data.id,
+            packageName: pkg?.name ?? 'Tour',
+            destination: pkg?.destination ?? '',
+            durationDays: pkg?.duration_days ?? 0,
+            price: Number(pkg?.price ?? 0),
+            currency: pkg?.currency ?? 'PHP',
+            bookedAt: data.created_at,
+          })
+        }
+      })
+  }, [user?.id])
 
   const greeting = timeGreeting(now)
   const name = deriveName(
@@ -575,6 +612,50 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           </button>
+        </motion.div>
+      )}
+
+      {/* Upcoming Tour */}
+      {upcomingTour && (
+        <motion.div variants={itemVariants}>
+          <Card className="overflow-hidden border-0 shadow-sm bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <div className="w-5 h-5 rounded-lg bg-emerald-600 flex items-center justify-center">
+                      <Package className="h-3 w-3 text-white" />
+                    </div>
+                    <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-widest">
+                      Confirmed Tour
+                    </span>
+                  </div>
+                  <p className="font-bold text-base leading-snug truncate">{upcomingTour.packageName}</p>
+                  <div className="flex items-center gap-1 mt-0.5">
+                    <MapPin className="h-3 w-3 text-emerald-600 shrink-0" />
+                    <span className="text-xs text-muted-foreground truncate">{upcomingTour.destination}</span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {upcomingTour.durationDays} day{upcomingTour.durationDays !== 1 ? 's' : ''}
+                    </span>
+                    <span className="tabular-nums font-semibold text-foreground">
+                      {upcomingTour.currency} {upcomingTour.price.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 h-8 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-400"
+                  onClick={() => navigate('/tours')}
+                >
+                  View
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </motion.div>
       )}
 

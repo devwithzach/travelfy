@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Globe, MapPin, Calendar, DollarSign, Users,
-  CheckCircle2, Clock, Search, Package, Bookmark,
+  CheckCircle2, Clock, Search, Package, Bookmark, SlidersHorizontal,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
@@ -211,6 +211,20 @@ export default function Tours() {
   // Package ratings state (for Browse tab)
   const [pkgRatings, setPkgRatings] = useState<Record<string, { avg: number; count: number }>>({})
 
+  // Operator names map for Browse tab
+  const [operatorNames, setOperatorNames] = useState<Record<string, string>>({})
+
+  // Filter / sort state
+  const [filterMinPrice, setFilterMinPrice] = useState('')
+  const [filterMaxPrice, setFilterMaxPrice] = useState('')
+  const [filterDuration, setFilterDuration] = useState<'all' | '1-3' | '4-7' | '8+'>('all')
+  const [sortBy, setSortBy] = useState<'latest' | 'price-asc' | 'price-desc' | 'rating'>('latest')
+  const [showFilters, setShowFilters] = useState(false)
+
+  // Booking cancellation state
+  const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null)
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null)
+
   // ---------------------------------------------------------------------------
   // Push subscription: re-register if permission already granted
   // ---------------------------------------------------------------------------
@@ -239,23 +253,39 @@ export default function Tours() {
       .then(({ data, error }) => {
         if (cancelled) return
         if (!error && data) {
-          setPackages(
-            data.map((r) => ({
-              id: r.id,
-              operatorId: r.operator_id,
-              name: r.name,
-              destination: r.destination,
-              description: r.description ?? '',
-              durationDays: r.duration_days,
-              price: Number(r.price),
-              currency: r.currency ?? 'PHP',
-              maxSlots: r.max_slots,
-              availableSlots: r.available_slots != null ? Number(r.available_slots) : null,
-              coverImage: r.cover_image ?? '',
-              status: 'published',
-              createdAt: r.created_at,
-            }))
-          )
+          const mapped = data.map((r) => ({
+            id: r.id,
+            operatorId: r.operator_id,
+            name: r.name,
+            destination: r.destination,
+            description: r.description ?? '',
+            durationDays: r.duration_days,
+            price: Number(r.price),
+            currency: r.currency ?? 'PHP',
+            maxSlots: r.max_slots,
+            availableSlots: r.available_slots != null ? Number(r.available_slots) : null,
+            coverImage: r.cover_image ?? '',
+            status: 'published' as const,
+            createdAt: r.created_at,
+          }))
+          setPackages(mapped)
+
+          const operatorIds = [...new Set(data.map(r => r.operator_id as string))]
+          if (operatorIds.length > 0) {
+            supabase.from('user_profiles')
+              .select('id, full_name, email')
+              .in('id', operatorIds)
+              .then(({ data: profiles }) => {
+                if (profiles) {
+                  const map: Record<string, string> = {}
+                  profiles.forEach(p => {
+                    const row = p as { id: string; full_name?: string; email?: string }
+                    map[row.id] = row.full_name || row.email || 'Operator'
+                  })
+                  setOperatorNames(map)
+                }
+              })
+          }
         }
         setPackagesLoading(false)
       })
@@ -374,14 +404,58 @@ export default function Tours() {
   )
 
   const filteredPackages = useMemo(() => {
-    const q = search.toLowerCase().trim()
-    if (!q) return packages
-    return packages.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.destination.toLowerCase().includes(q)
-    )
-  }, [packages, search])
+    let result = packages.filter(p => {
+      const q = search.toLowerCase().trim()
+      const matchesSearch = !q || p.name.toLowerCase().includes(q) || p.destination.toLowerCase().includes(q)
+      const minPrice = filterMinPrice ? Number(filterMinPrice) : 0
+      const maxPrice = filterMaxPrice ? Number(filterMaxPrice) : Infinity
+      const matchesPrice = p.price >= minPrice && p.price <= maxPrice
+      const matchesDuration =
+        filterDuration === 'all' ? true :
+        filterDuration === '1-3' ? p.durationDays <= 3 :
+        filterDuration === '4-7' ? p.durationDays >= 4 && p.durationDays <= 7 :
+        p.durationDays >= 8
+      return matchesSearch && matchesPrice && matchesDuration
+    })
+
+    if (sortBy === 'price-asc') result = [...result].sort((a, b) => a.price - b.price)
+    else if (sortBy === 'price-desc') result = [...result].sort((a, b) => b.price - a.price)
+    else if (sortBy === 'rating') {
+      result = [...result].sort((a, b) => {
+        const ra = pkgRatings[a.id]?.avg ?? 0
+        const rb = pkgRatings[b.id]?.avg ?? 0
+        return rb - ra
+      })
+    }
+
+    return result
+  }, [packages, search, filterMinPrice, filterMaxPrice, filterDuration, sortBy, pkgRatings])
+
+  // ---------------------------------------------------------------------------
+  // Active filter count
+  // ---------------------------------------------------------------------------
+  const activeFilterCount =
+    (filterMinPrice ? 1 : 0) +
+    (filterMaxPrice ? 1 : 0) +
+    (filterDuration !== 'all' ? 1 : 0) +
+    (sortBy !== 'latest' ? 1 : 0)
+
+  // ---------------------------------------------------------------------------
+  // Cancel booking
+  // ---------------------------------------------------------------------------
+  const cancelBooking = async (bookingId: string) => {
+    setCancellingBookingId(bookingId)
+    setConfirmCancelId(null)
+    const { error } = await supabase
+      .from('tour_bookings')
+      .update({ status: 'cancelled' })
+      .eq('id', bookingId)
+      .eq('traveler_id', user!.id)
+    if (!error) {
+      setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: 'cancelled' as const } : b))
+    }
+    setCancellingBookingId(null)
+  }
 
   // ---------------------------------------------------------------------------
   // Open book dialog
@@ -625,26 +699,114 @@ export default function Tours() {
           {/* Browse tab                                                        */}
           {/* ---------------------------------------------------------------- */}
           <TabsContent value="browse" className="space-y-3">
-            {/* Search bar */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                className="pl-9"
-                placeholder="Search by name or destination…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+            {/* Search + filter row */}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  className="pl-9"
+                  placeholder="Search by name or destination…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowFilters(v => !v)}
+                className={cn(
+                  'relative h-10 w-10 rounded-xl border border-input flex items-center justify-center shrink-0 transition-colors',
+                  showFilters ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground hover:bg-muted'
+                )}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                {activeFilterCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center tabular-nums">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
             </div>
+
+            {/* Filter panel */}
+            <AnimatePresence>
+              {showFilters && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="space-y-3 pb-1">
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        placeholder="Min ₱"
+                        type="number"
+                        value={filterMinPrice}
+                        onChange={e => setFilterMinPrice(e.target.value)}
+                        className="flex-1 h-9 text-sm"
+                      />
+                      <span className="text-muted-foreground text-sm">–</span>
+                      <Input
+                        placeholder="Max ₱"
+                        type="number"
+                        value={filterMaxPrice}
+                        onChange={e => setFilterMaxPrice(e.target.value)}
+                        className="flex-1 h-9 text-sm"
+                      />
+                    </div>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {(['all', '1-3', '4-7', '8+'] as const).map(d => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setFilterDuration(d)}
+                          className={cn(
+                            'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
+                            filterDuration === d
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                          )}
+                        >
+                          {d === 'all' ? 'Any duration' : d === '1-3' ? '1–3 days' : d === '4-7' ? '4–7 days' : '8+ days'}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {([
+                        ['latest', 'Latest'],
+                        ['price-asc', 'Price ↑'],
+                        ['price-desc', 'Price ↓'],
+                        ['rating', '★ Rating'],
+                      ] as const).map(([val, label]) => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setSortBy(val)}
+                          className={cn(
+                            'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
+                            sortBy === val
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {packagesLoading ? (
               <Spinner />
             ) : filteredPackages.length === 0 ? (
               <EmptyState
                 icon={Globe}
-                title={search ? 'No matching tours' : 'No tours available yet'}
+                title={search || activeFilterCount > 0 ? 'No matching tours' : 'No tours available yet'}
                 description={
-                  search
-                    ? 'Try a different search term.'
+                  search || activeFilterCount > 0
+                    ? 'Try adjusting your search or filters.'
                     : 'Check back soon — operators will be publishing packages here.'
                 }
               />
@@ -674,7 +836,16 @@ export default function Tours() {
                         <CardContent className="p-4 space-y-3">
                           {/* Header row */}
                           <div className="flex items-start justify-between gap-2">
-                            <h3 className="font-bold text-base leading-snug flex-1">{pkg.name}</h3>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="font-bold text-base leading-snug">{pkg.name}</h3>
+                              <button
+                                type="button"
+                                onClick={() => navigate(`/operator/${pkg.operatorId}`)}
+                                className="text-[11px] text-violet-600 hover:underline text-left"
+                              >
+                                by {operatorNames[pkg.operatorId] || 'Operator'}
+                              </button>
+                            </div>
                             {existingBooking ? (
                               <BookingStatusBadge status={existingBooking.status} />
                             ) : null}
@@ -808,6 +979,28 @@ export default function Tours() {
                         <p className="text-[11px] text-muted-foreground">
                           Booked {formatDate(booking.createdAt)}
                         </p>
+
+                        {booking.status === 'pending' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirmCancelId === booking.id) {
+                                cancelBooking(booking.id)
+                              } else {
+                                setConfirmCancelId(booking.id)
+                                setTimeout(() => setConfirmCancelId(prev => prev === booking.id ? null : prev), 3000)
+                              }
+                            }}
+                            disabled={cancellingBookingId === booking.id}
+                            className="w-full text-xs text-rose-600 border border-rose-200 rounded-xl py-2 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors disabled:opacity-50"
+                          >
+                            {cancellingBookingId === booking.id
+                              ? 'Cancelling…'
+                              : confirmCancelId === booking.id
+                              ? 'Tap again to confirm'
+                              : 'Cancel Booking'}
+                          </button>
+                        )}
 
                         {booking.status === 'confirmed' && !tripAlreadyCreated(booking.id) && (
                           <Button

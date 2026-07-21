@@ -34,10 +34,12 @@ import Insurance from '@/pages/Insurance'
 import Splitter from '@/pages/Splitter'
 import Journal from '@/pages/Journal'
 import TripExport from '@/pages/TripExport'
+import TripShare from '@/pages/TripShare'
 import VisaTracker from '@/pages/VisaTracker'
 import Admin from '@/pages/Admin'
 import Operator from '@/pages/Operator'
 import Tours from '@/pages/Tours'
+import OperatorProfile from '@/pages/OperatorProfile'
 import Landing from '@/pages/Landing'
 import InstallPrompt from '@/components/common/InstallPrompt'
 import PWAUpdatePrompt from '@/components/common/PWAUpdatePrompt'
@@ -71,6 +73,8 @@ function AppRoutes() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/operator/:id" element={<OperatorProfile />} />
+        <Route path="/share/:token" element={<TripShare />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     )
@@ -79,6 +83,9 @@ function AppRoutes() {
   return (
     <TripProvider>
       <Routes>
+        {/* Public share page — no auth, no layout */}
+        <Route path="/share/:token" element={<TripShare />} />
+
         {/* Trips list - own layout (no bottom nav). Standalone picker. */}
         <Route path="/trips" element={<Trips />} />
 
@@ -113,6 +120,7 @@ function AppRoutes() {
           <Route path="/visa-tracker" element={<VisaTracker />} />
           <Route path="/tours" element={<Tours />} />
           <Route path="/operator" element={<Operator />} />
+          <Route path="/operator/:id" element={<OperatorProfile />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="/country-info" element={<CountryInfo />} />
           <Route path="/settings" element={<Settings />} />

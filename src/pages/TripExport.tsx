@@ -1,11 +1,12 @@
-import { useState } from 'react'
-import { Share2, Copy, Check, Download, FileText, Plane, Building2, Map, Phone, DollarSign, ListChecks } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Share2, Copy, Check, Download, FileText, Plane, Building2, Map, Phone, DollarSign, ListChecks, Link2, CheckCircle2 } from 'lucide-react'
 import PageHeader from '@/components/common/PageHeader'
 import { useTrip } from '@/contexts/TripContext'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/utils/cn'
 import { formatDate } from '@/utils/dateUtils'
+import { supabase } from '@/lib/supabase'
 
 function formatTime(t: string) {
   if (!t) return ''
@@ -29,6 +30,36 @@ export default function TripExport() {
   const [selected, setSelected] = useState<string[]>(['overview', 'flights', 'hotels', 'itinerary', 'contacts'])
   const [copied, setCopied] = useState(false)
   const [shared, setShared] = useState(false)
+  const [shareToken, setShareToken] = useState<string | null>(null)
+  const [generatingLink, setGeneratingLink] = useState(false)
+  const [linkCopied, setLinkCopied] = useState(false)
+
+  useEffect(() => {
+    if (!trip?.tripInfo?.id) return
+    supabase.from('trips').select('share_token').eq('id', trip.tripInfo.id).single()
+      .then(({ data }) => { if (data?.share_token) setShareToken(data.share_token) })
+  }, [trip?.tripInfo?.id])
+
+  const generateShareLink = async () => {
+    if (!trip?.tripInfo?.id) return
+    setGeneratingLink(true)
+    const token = shareToken ?? crypto.randomUUID()
+    if (!shareToken) {
+      await supabase.from('trips').update({ share_token: token }).eq('id', trip.tripInfo.id)
+      setShareToken(token)
+    }
+    const url = `${window.location.origin}/share/${token}`
+    await navigator.clipboard.writeText(url).catch(() => {})
+    setLinkCopied(true)
+    setTimeout(() => setLinkCopied(false), 3000)
+    setGeneratingLink(false)
+  }
+
+  const revokeShareLink = async () => {
+    if (!trip?.tripInfo?.id) return
+    await supabase.from('trips').update({ share_token: null }).eq('id', trip.tripInfo.id)
+    setShareToken(null)
+  }
 
   const toggle = (id: string) =>
     setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -167,6 +198,58 @@ export default function TripExport() {
         icon={Share2}
         iconColor="text-indigo-600"
       />
+
+      {/* Share Trip Link */}
+      <div className="px-4 mb-4">
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                <Link2 className="h-4 w-4 text-violet-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold">Share Trip Link</p>
+                <p className="text-xs text-muted-foreground">Anyone with the link can view (read-only)</p>
+              </div>
+            </div>
+            {shareToken && (
+              <div className="flex items-center gap-2 bg-muted rounded-xl px-3 py-2">
+                <span className="text-xs text-muted-foreground truncate flex-1 font-mono">
+                  {window.location.origin}/share/{shareToken}
+                </span>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                className="flex-1 h-9 gap-1.5"
+                onClick={generateShareLink}
+                disabled={generatingLink}
+              >
+                {generatingLink ? (
+                  <div className="h-3.5 w-3.5 border-2 border-white/50 border-t-white rounded-full animate-spin" />
+                ) : linkCopied ? (
+                  <><CheckCircle2 className="h-3.5 w-3.5" />Copied!</>
+                ) : shareToken ? (
+                  <><Copy className="h-3.5 w-3.5" />Copy Link</>
+                ) : (
+                  <><Link2 className="h-3.5 w-3.5" />Generate Link</>
+                )}
+              </Button>
+              {shareToken && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-9 text-rose-600 border-rose-200 hover:bg-rose-50"
+                  onClick={revokeShareLink}
+                >
+                  Revoke
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Section picker */}
       <div className="px-4 mb-4">
